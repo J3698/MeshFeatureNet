@@ -1,5 +1,5 @@
 # MeshFeatureNet
-Unsupervised mesh-based object classification
+Unsupervised mesh-based model classification
 
 Code adapted from SoftRasterizer/examples/recon
 
