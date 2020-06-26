@@ -1,3 +1,7 @@
+#
+data/MN40Objs.zip
+data/MN40Objs/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
