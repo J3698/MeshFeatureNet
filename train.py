@@ -30,7 +30,7 @@ SAVE_FREQ = 10000
 RANDOM_SEED = 0
 
 MODEL_DIRECTORY = 'data/results/models'
-DATASET_DIRECTORY = 'data/datasets'
+DATASET_DIRECTORY = 'data/MN40Objs'
 
 IMAGE_SIZE = 64
 SIGMA_VAL = 1e-4
@@ -86,9 +86,12 @@ if args.resume_path:
     start_iter = int(os.path.split(args.resume_path)[1][11:].split('.')[0]) + 1
     print('Resuming from %s iteration' % start_iter)
     
-dataset_train = datasets.ShapeNet(args.dataset_directory, args.class_ids.split(','), 'train')
+dataset_train = datasets.ModelNet40(args.dataset_directory,
+                                    args.image_size, 'train')
 
 def train():
+    print("Starting to train")
+
     end = time.time()
     batch_time = AverageMeter()
     data_time = AverageMeter()
@@ -100,15 +103,12 @@ def train():
         model.set_sigma(adjust_sigma(args.sigma_val, i))
 
         # load images from multi-view
-        images_a, images_b, viewpoints_a, viewpoints_b = dataset_train.get_random_batch(args.batch_size)
-        images_a = images_a.cuda()
-        images_b = images_b.cuda()
-        viewpoints_a = viewpoints_a.cuda()
-        viewpoints_b = viewpoints_b.cuda()
+        images, viewpoints = dataset_train.get_random_batch(args.batch_size)
+        images = [i.cuda() for i in images]
+        viewpoints = [i.cuda() for i in viewpoints]
 
         # soft render images
-        render_images, laplacian_loss, flatten_loss = model([images_a, images_b], 
-                                                            [viewpoints_a, viewpoints_b],
+        render_images, laplacian_loss, flatten_loss = model(images, viewpoints,
                                                             task='train')
         laplacian_loss = laplacian_loss.mean()
         flatten_loss = flatten_loss.mean()

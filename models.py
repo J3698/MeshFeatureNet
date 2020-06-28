@@ -12,9 +12,12 @@ class Encoder(nn.Module):
         dim_hidden = [dim1, dim1*2, dim1*4, dim2, dim2]
 
 
-        self.conv1 = nn.Conv2d(dim_in, dim_hidden[0], kernel_size=5, stride=2, padding=2)
-        self.conv2 = nn.Conv2d(dim_hidden[0], dim_hidden[1], kernel_size=5, stride=2, padding=2)
-        self.conv3 = nn.Conv2d(dim_hidden[1], dim_hidden[2], kernel_size=5, stride=2, padding=2)
+        self.conv1 = nn.Conv2d(dim_in, dim_hidden[0], kernel_size=5, 
+                               stride=2, padding=2)
+        self.conv2 = nn.Conv2d(dim_hidden[0], dim_hidden[1], kernel_size=5,
+                               stride=2, padding=2)
+        self.conv3 = nn.Conv2d(dim_hidden[1], dim_hidden[2], kernel_size=5,
+                               stride=2, padding=2)
 
         self.bn1 = nn.BatchNorm2d(dim_hidden[0])
         self.bn2 = nn.BatchNorm2d(dim_hidden[1])
@@ -118,6 +121,7 @@ class Model(nn.Module):
         images = torch.cat((image_a, image_b), dim=0)
         # [Va, Va, Vb, Vb], set viewpoints
         viewpoints = torch.cat((viewpoint_a, viewpoint_a, viewpoint_b, viewpoint_b), dim=0)
+        print("viewpoints", viewpoints.shape)
         self.renderer.transform.set_eyes(viewpoints)
 
         vertices, faces = self.reconstruct(images)
@@ -129,6 +133,8 @@ class Model(nn.Module):
         faces = torch.cat((faces, faces), dim=0)
 
         # [Raa, Rba, Rab, Rbb], cross render multiview images
+        print("vertices", vertices.shape)
+        print("faces", faces.shape)
         silhouettes = self.renderer(vertices, faces)
         return silhouettes.chunk(4, dim=0), laplacian_loss, flatten_loss
 
@@ -142,8 +148,5 @@ class Model(nn.Module):
         iou = (voxels * voxels_predict).sum((1, 2, 3)) / (0 < (voxels + voxels_predict)).sum((1, 2, 3))
         return iou, vertices, faces
 
-    def forward(self, images=None, viewpoints=None, voxels=None, task='train'):
-        if task == 'train':
-            return self.predict_multiview(images[0], images[1], viewpoints[0], viewpoints[1])
-        elif task == 'test':
-            return self.evaluate_iou(images, voxels)
+    def forward(self, images, viewpoints):
+        return self.predict_multiview(imges, viewpoints)
