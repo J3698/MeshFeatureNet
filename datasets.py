@@ -18,6 +18,7 @@ class ModelNet40():
         self.paths = self.load_file_paths()
         self.elevation = 30.
         self.distance = 2.732
+        self.max_model_dimension = .5
         self.num_views = 24
         self.deg_per_view = 360 / self.num_views
         self.renderer = sr.SoftRenderer(image_size=image_size,
@@ -25,7 +26,7 @@ class ModelNet40():
                                 camera_mode='look_at',
                                 viewing_angle=self.deg_per_view,
                                 dist_eps=1e-10)
-        self.save_test_render()
+
         print()
         print(self.partition)
         print(self.folder)
@@ -48,14 +49,15 @@ class ModelNet40():
         partition = os.path.split(folder)[1]
         return partition == self.partition
 
-    def save_test_render(self):
-        writer = imageio.get_writer('rotation.gif', mode='I')
-        images = torch.chunk(self[0][0], 24, dim = 0)
+
+    def save_test_render(self, idx = 0):
+        writer = imageio.get_writer('rotation{}.gif'.format(idx), mode='I')
+        images = torch.chunk(self[idx][0], 24, dim = 0)
         for idx, img in enumerate(images):
             img = img.cpu().numpy().squeeze()
-            print(img.shape)
             writer.append_data((255 * img.transpose((1, 2, 0))).astype(np.uint8))
         writer.close()
+
 
     def get_random_batch(self, batch_size):
         images_and_viewpoints = \
@@ -78,9 +80,25 @@ class ModelNet40():
 
     def get_meshes_for_views(self, idx):
         mesh = sr.Mesh.from_obj(self.paths[idx])
-        faces = torch.cat(self.num_views * [mesh.faces.cuda()])
         vertices = torch.cat(self.num_views * [mesh.vertices.cuda()])
+        faces = torch.cat(self.num_views * [mesh.faces.cuda()])
+
+        self.center_vertices(vertices)
+        self.scale_vertices(vertices)
         return faces, vertices
+
+
+    def center_vertices(self, vertices):
+        get_center = lambda ax: (vertices[0, :, ax].max().item() + 
+                                 vertices[0, :, ax].min().item()) / 2
+        for ax in range(vertices.shape[2]):
+            vertices[:, :, ax] -= get_center(ax)
+
+
+    def scale_vertices(self, vertices):
+        max_dim = vertices.abs().max().item()
+        scale_factor = self.max_model_dimension / max_dim
+        vertices *= scale_factor
 
 
     def get_surrounding_viewpoints(self):
