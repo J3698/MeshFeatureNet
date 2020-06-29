@@ -49,7 +49,7 @@ class Encoder(nn.Module):
         x = x.reshape(batch_size, num_views, -1)
 
         # encode views with LSTM
-        x.transpose_(0, 1)
+        x = x.transpose(0, 1)
         x = self.encoder(x)[0][-1]
         assert x.shape == (batch_size, self.dim_out)
 

@@ -12,9 +12,15 @@ def iou(predict, target, eps=1e-6):
 def iou_loss(predict, target):
     return 1 - iou(predict, target)
 
-def multiview_iou_loss(predicts, targets_a, targets_b):
+def multiview_iou_loss(target_images, predict_images):
+    print("targ", target_images.shape)
+    print("pred", predict_images.shape)
+    iou_losses = [iou_loss(predict_images[i][3], target_images[i][3]) for i in range(len(target_images))]
+    return sum(iou_losses) / len(iou_losses)
+    """
     loss = (iou_loss(predicts[0][:, 3], targets_a[:, 3]) + \
             iou_loss(predicts[1][:, 3], targets_a[:, 3]) + \
             iou_loss(predicts[2][:, 3], targets_b[:, 3]) + \
             iou_loss(predicts[3][:, 3], targets_b[:, 3])) / 4
     return loss
+    """

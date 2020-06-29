@@ -3,7 +3,7 @@ import argparse
 import torch
 import numpy as np
 from losses import multiview_iou_loss
-from utils import AverageMeter, img_cvt
+from utils import AverageMeter, imgs_to_gif
 import soft_renderer as sr
 import soft_renderer.functional as srf
 import datasets
@@ -35,6 +35,8 @@ DATASET_DIRECTORY = 'data/MN40Objs'
 IMAGE_SIZE = 128
 SIGMA_VAL = 1e-4
 START_ITERATION = 0
+
+VIEWS = 24
 
 RESUME_PATH = ''
 
@@ -87,7 +89,7 @@ if args.resume_path:
     print('Resuming from %s iteration' % start_iter)
  
 dataset_train = datasets.ModelNet40(args.dataset_directory,
-                                    args.image_size, args.sigma_val, partition='train')
+                                    args.image_size, args.sigma_val, VIEWS, partition='train')
 
 def train():
     print("Starting to train")
@@ -111,12 +113,14 @@ def train():
         model_images, laplacian_loss, flatten_loss = model(images, viewpoints)
         laplacian_loss = laplacian_loss.mean()
         flatten_loss = flatten_loss.mean()
+        images = images.reshape(model_images.shape)
+        assert images.shape == (BATCH_SIZE * VIEWS, 4, args.image_size, args.image_size)
 
         # compute loss
         loss = multiview_iou_loss(images, model_images) + \
                args.lambda_laplacian * laplacian_loss + \
                args.lambda_flatten * flatten_loss
-        losses.update(loss.data.item(), images_a.size(0))
+        losses.update(loss.data.item(), model_images.size(0))
 
         # compute gradient and optimize
         optimizer.zero_grad()
@@ -136,13 +140,14 @@ def train():
 
         # save demo images
         if i % args.demo_freq == 0:
-            demo_image = images_a[0:1]
-            demo_path = os.path.join(directory_output, 'demo_%07d.obj'%i)
-            demo_v, demo_f = model.reconstruct(demo_image)
-            srf.save_obj(demo_path, demo_v[0], demo_f[0])
-            
-            imageio.imsave(os.path.join(image_output, '%07d_fake.png' % i), img_cvt(render_images[0][0]))
-            imageio.imsave(os.path.join(image_output, '%07d_input.png' % i), img_cvt(images_a[0]))
+            demo_input_images = images[0:24]
+            demo_fake_images = model_images[0:24]
+            print("demo input imgs", demo_input_images.shape)
+            print("demo fake imgs", demo_fake_images.shape)
+            fake_img_path = '%07d_fake.gif' % i
+            input_img_path = '%07d_input.gif' % i
+            imgs_to_gif(demo_fake_images, fake_img_path)
+            imgs_to_gif(demo_input_images, input_img_path)
 
         # print
         if i % args.print_freq == 0:

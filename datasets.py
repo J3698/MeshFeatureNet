@@ -5,10 +5,10 @@ import torch
 from torch.utils.data import DataLoader, Dataset
 import numpy as np
 import tqdm
-import imageio
+from utils import imgs_to_gif
 
 class ModelNet40():
-    def __init__(self, folder, image_size, sigma_val, partition=None):
+    def __init__(self, folder, image_size, sigma_val, num_views, partition=None):
         """
         Dataset returns rendered images of object
         """
@@ -19,7 +19,7 @@ class ModelNet40():
         self.elevation = 30.
         self.distance = 2.732
         self.max_model_dimension = .5
-        self.num_views = 24
+        self.num_views = num_views
         self.deg_per_view = 360 / self.num_views
         self.image_size = image_size
         self.renderer = sr.SoftRenderer(image_size=image_size,
@@ -27,7 +27,7 @@ class ModelNet40():
                                 camera_mode='look_at',
                                 viewing_angle=self.deg_per_view,
                                 dist_eps=1e-10)
-
+        self.save_test_render()
         print(self)
 
     def __repr__(self):
@@ -51,12 +51,8 @@ class ModelNet40():
 
 
     def save_test_render(self, idx = 0):
-        writer = imageio.get_writer('rotation{}.gif'.format(idx), mode='I')
-        images = torch.chunk(self[idx][0], 24, dim = 0)
-        for idx, img in enumerate(images):
-            img = img.cpu().numpy().squeeze()
-            writer.append_data((255 * img.transpose((1, 2, 0))).astype(np.uint8))
-        writer.close()
+        imgs = torch.chunk(self[idx][0], 24, dim = 0)
+        imgs_to_gif(imgs, 'rotation{}.gif'.format(idx))
 
 
     def get_random_batch(self, batch_size):
