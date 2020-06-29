@@ -9,15 +9,17 @@ import math
 class Encoder(nn.Module):
     def __init__(self, dim_in=4, dim_out=512, dim1=64, dim2=1024, im_size=64):
         super(Encoder, self).__init__()
+
+        self.dim_in = dim_in
+        self.dim_out = dim_out
+        self.dim1 = dim1
+        self.dim2 = dim2
+        self.im_size = im_size
         dim_hidden = [dim1, dim1*2, dim1*4, dim2, dim2]
 
-
-        self.conv1 = nn.Conv2d(dim_in, dim_hidden[0], kernel_size=5, 
-                               stride=2, padding=2)
-        self.conv2 = nn.Conv2d(dim_hidden[0], dim_hidden[1], kernel_size=5,
-                               stride=2, padding=2)
-        self.conv3 = nn.Conv2d(dim_hidden[1], dim_hidden[2], kernel_size=5,
-                               stride=2, padding=2)
+        self.conv1 = nn.Conv2d(dim_in, dim_hidden[0], kernel_size=5, stride=2, padding=2)
+        self.conv2 = nn.Conv2d(dim_hidden[0], dim_hidden[1], kernel_size=5, stride=2, padding=2)
+        self.conv3 = nn.Conv2d(dim_hidden[1], dim_hidden[2], kernel_size=5, stride=2, padding=2)
 
         self.bn1 = nn.BatchNorm2d(dim_hidden[0])
         self.bn2 = nn.BatchNorm2d(dim_hidden[1])
@@ -30,6 +32,11 @@ class Encoder(nn.Module):
         self.encoder = nn.LSTM(dim_out, dim_out, num_layers = 3)
 
     def forward(self, x):
+        # convert batch of image sequences into one big batch
+        batch_size, num_views, image_channels, image_size, _ = x.shape
+        x = x.reshape(batch_size * num_views, image_channels, image_size, image_size)
+
+        # extract features from images
         x = F.relu(self.bn1(self.conv1(x)), inplace=True)
         x = F.relu(self.bn2(self.conv2(x)), inplace=True)
         x = F.relu(self.bn3(self.conv3(x)), inplace=True)
@@ -37,7 +44,15 @@ class Encoder(nn.Module):
         x = F.relu(self.fc1(x), inplace=True)
         x = F.relu(self.fc2(x), inplace=True)
         x = F.relu(self.fc3(x), inplace=True)
-        x = self.encoder(x)
+
+        # convert big batch back into batch of sequences
+        x = x.reshape(batch_size, num_views, -1)
+
+        # encode views with LSTM
+        x.transpose_(0, 1)
+        x = self.encoder(x)[0][-1]
+        assert x.shape == (batch_size, self.dim_out)
+
         return x
 
 
@@ -100,8 +115,8 @@ class Model(nn.Module):
         self.encoder = Encoder(im_size=args.image_size)
         self.decoder = Decoder(filename_obj)
         self.renderer = sr.SoftRenderer(image_size=args.image_size, sigma_val=args.sigma_val, 
-                                        aggr_func_rgb='hard', camera_mode='look_at', viewing_angle=15,
-                                        dist_eps=1e-10)
+                                        aggr_func_rgb='hard', camera_mode='look_at',
+                                        viewing_angle=15, dist_eps=1e-10)
         self.laplacian_loss = sr.LaplacianLoss(self.decoder.vertices_base, self.decoder.faces)
         self.flatten_loss = sr.FlattenLoss(self.decoder.faces)
 
@@ -115,22 +130,61 @@ class Model(nn.Module):
 
 
     def reconstruct(self, images):
+        """
+        Takes a batch of image sequences and a batch of viewpoint sequences, and attempts to
+        predict the meshes
+
+        Returns the predicted mesh vertices and faces
+        """
         vertices, faces = self.decoder(self.encoder(images))
         return vertices, faces
 
 
     def predict_multiview(self, images, viewpoints):
+        """
+        Takes a batch of image sequences and a batch of viewpoint sequences, and attempts to
+        reconstruct the images by predicting and then rendering meshes.
+
+        Returns the reconstructed images and the laplacian and flatten losses from the predicted
+        meshes.
+        """
+        batch_size, num_views, _, _, _ = images.shape
+
         # generate meshes
+        print("imgs", images.shape)
         vertices, faces = self.reconstruct(images)
+        num_vertices, num_faces = vertices.shape[1], faces.shape[1]
+        print("verts", vertices.shape)
+        assert vertices.shape == (batch_size, num_vertices, 3)
+        assert faces.shape == (batch_size, num_faces, 3)
+
+        # copy meshes for batch rendering
+        vertices = torch.cat(num_views * [vertices.unsqueeze(0)])
+        faces = torch.cat(num_views * [faces.unsqueeze(0)])
+        assert vertices.shape == (num_views, batch_size, num_vertices, 3)
+        assert faces.shape == (num_views, batch_size, num_faces, 3)
+
+        # transpose and reshape meshes for batch rendering
+        vertices = vertices.transpose_(0, 1).reshape(num_views * batch_size, -1, 3)
+        faces = faces.transpose_(0, 1).reshape(num_views * batch_size, -1, 3)
+        assert vertices.shape == (batch_size * num_views, num_vertices, 3)
+        assert faces.shape == (batch_size * num_views, num_faces, 3)
+
+        # reshape viewpoints for batch rendering
+        viewpoints = viewpoints.reshape(-1, 3)
+        assert viewpoints.shape == (batch_size * num_views, 3)
+
+        # render images from meshes
+        self.renderer.transform.set_eyes(viewpoints)
+        reconstructed_images = self.renderer(vertices, faces)
+
         # calculate mesh loss
         laplacian_loss = self.laplacian_loss(vertices)
         flatten_loss = self.flatten_loss(vertices)
-        # render images from meshes
-        self.renderer.transform.set_eyes(viewpoints)
-        silhouettes = self.renderer(vertices, faces)
+
         # return images as separate tensors
         batch_size = images.size(0)
-        return silhouettes.chunk(batch_size, dim=0), laplacian_loss, flatten_loss
+        return reconstructed_images, laplacian_loss, flatten_loss
 
 
     def forward(self, images, viewpoints):

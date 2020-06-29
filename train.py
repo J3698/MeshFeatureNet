@@ -97,15 +97,15 @@ def train():
     data_time = AverageMeter()
     losses = AverageMeter()
 
+    images, viewpoints = dataset_train.get_random_batch(args.batch_size)
     for i in range(start_iter, args.num_iterations + 1):
         # adjust learning rate and sigma_val (decay after 150k iter)
-        lr = adjust_learning_rate([optimizer], args.learning_rate, i, method=args.lr_type)
+        lr = adjust_learning_rate([optimizer], args.learning_rate,
+                                  i, method=args.lr_type)
         model.set_sigma(adjust_sigma(args.sigma_val, i))
 
         # load images from multi-view
-        images, viewpoints = dataset_train.get_random_batch(args.batch_size)
-        print(images.device)
-        print(viewpoints.device)
+        # images, viewpoints = dataset_train.get_random_batch(args.batch_size)
 
         # soft render images
         model_images, laplacian_loss, flatten_loss = model(images, viewpoints)
