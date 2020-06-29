@@ -16,7 +16,7 @@ CLASS_IDS_ALL = (
     '02691156,02828884,02933112,02958343,03001627,03211117,03636649,' +
     '03691459,04090263,04256520,04379243,04401088,04530566')
 
-BATCH_SIZE = 64
+BATCH_SIZE = 16
 LEARNING_RATE = 1e-4
 LR_TYPE = 'step'
 NUM_ITERATIONS = 250000
@@ -85,9 +85,9 @@ if args.resume_path:
     optimizer.load_state_dict(state_dicts['optimizer'])
     start_iter = int(os.path.split(args.resume_path)[1][11:].split('.')[0]) + 1
     print('Resuming from %s iteration' % start_iter)
-    
+ 
 dataset_train = datasets.ModelNet40(args.dataset_directory,
-                                    args.image_size, 'train')
+                                    args.image_size, args.sigma_val, partition='train')
 
 def train():
     print("Starting to train")
@@ -104,17 +104,16 @@ def train():
 
         # load images from multi-view
         images, viewpoints = dataset_train.get_random_batch(args.batch_size)
-        images = [i.cuda() for i in images]
-        viewpoints = [i.cuda() for i in viewpoints]
+        print(images.device)
+        print(viewpoints.device)
 
         # soft render images
-        render_images, laplacian_loss, flatten_loss = model(images, viewpoints,
-                                                            task='train')
+        model_images, laplacian_loss, flatten_loss = model(images, viewpoints)
         laplacian_loss = laplacian_loss.mean()
         flatten_loss = flatten_loss.mean()
 
         # compute loss
-        loss = multiview_iou_loss(render_images, images_a, images_b) + \
+        loss = multiview_iou_loss(images, model_images) + \
                args.lambda_laplacian * laplacian_loss + \
                args.lambda_flatten * flatten_loss
         losses.update(loss.data.item(), images_a.size(0))

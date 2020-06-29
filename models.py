@@ -105,48 +105,33 @@ class Model(nn.Module):
         self.laplacian_loss = sr.LaplacianLoss(self.decoder.vertices_base, self.decoder.faces)
         self.flatten_loss = sr.FlattenLoss(self.decoder.faces)
 
+
     def model_param(self):
         return list(self.encoder.parameters()) + list(self.decoder.parameters())
 
+
     def set_sigma(self, sigma):
         self.renderer.set_sigma(sigma)
+
 
     def reconstruct(self, images):
         vertices, faces = self.decoder(self.encoder(images))
         return vertices, faces
 
-    def predict_multiview(self, image_a, image_b, viewpoint_a, viewpoint_b):
-        batch_size = image_a.size(0)
-        # [Ia, Ib]
-        images = torch.cat((image_a, image_b), dim=0)
-        # [Va, Va, Vb, Vb], set viewpoints
-        viewpoints = torch.cat((viewpoint_a, viewpoint_a, viewpoint_b, viewpoint_b), dim=0)
-        print("viewpoints", viewpoints.shape)
-        self.renderer.transform.set_eyes(viewpoints)
 
+    def predict_multiview(self, images, viewpoints):
+        # generate meshes
         vertices, faces = self.reconstruct(images)
+        # calculate mesh loss
         laplacian_loss = self.laplacian_loss(vertices)
         flatten_loss = self.flatten_loss(vertices)
-
-        # [Ma, Mb, Ma, Mb]
-        vertices = torch.cat((vertices, vertices), dim=0)
-        faces = torch.cat((faces, faces), dim=0)
-
-        # [Raa, Rba, Rab, Rbb], cross render multiview images
-        print("vertices", vertices.shape)
-        print("faces", faces.shape)
+        # render images from meshes
+        self.renderer.transform.set_eyes(viewpoints)
         silhouettes = self.renderer(vertices, faces)
-        return silhouettes.chunk(4, dim=0), laplacian_loss, flatten_loss
+        # return images as separate tensors
+        batch_size = images.size(0)
+        return silhouettes.chunk(batch_size, dim=0), laplacian_loss, flatten_loss
 
-    def evaluate_iou(self, images, voxels):
-        vertices, faces = self.reconstruct(images)
-
-        faces_ = srf.face_vertices(vertices, faces).data
-        faces_norm = faces_ * 1. * (32. - 1) / 32. + 0.5
-        voxels_predict = srf.voxelization(faces_norm, 32, False).cpu().numpy()
-        voxels_predict = voxels_predict.transpose(0, 2, 1, 3)[:, :, :, ::-1]
-        iou = (voxels * voxels_predict).sum((1, 2, 3)) / (0 < (voxels + voxels_predict)).sum((1, 2, 3))
-        return iou, vertices, faces
 
     def forward(self, images, viewpoints):
-        return self.predict_multiview(imges, viewpoints)
+        return self.predict_multiview(images, viewpoints)
