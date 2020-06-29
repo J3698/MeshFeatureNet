@@ -21,18 +21,18 @@ class ModelNet40():
         self.max_model_dimension = .5
         self.num_views = 24
         self.deg_per_view = 360 / self.num_views
+        self.image_size = image_size
         self.renderer = sr.SoftRenderer(image_size=image_size,
                                 sigma_val=sigma_val, aggr_func_rgb='hard',
                                 camera_mode='look_at',
                                 viewing_angle=self.deg_per_view,
                                 dist_eps=1e-10)
 
-        print()
-        print(self.partition)
-        print(self.folder)
-        print(len(self))
-        print(self.paths[0])
+        print(self)
 
+    def __repr__(self):
+        template = "Partition: {}\nFolder: {}\nModels: {}\nSample model path: {}"
+        return template.format(self.partition, self.folder, len(self), self.paths[0])
 
     def load_file_paths(self):
         data = []
@@ -63,17 +63,23 @@ class ModelNet40():
         images_and_viewpoints = \
             [self[np.random.randint(0, len(self) - 1)] for i in range(batch_size)]
         images, viewpoints = zip(*images_and_viewpoints)
-        return torch.cat(images, dim = 0), torch.cat(viewpoints, dim = 0)
+
+        images = torch.cat(images, dim = 0)
+        images = images.unsqueeze(0)
+        imges = images.reshape(batch_size, self.num_views, 4, self.image_size, self.image_size)
+
+        viewpoints = torch.cat(viewpoints, dim = 0)
+        viewpoints = viewpoints.unsqueeze(0)
+        viewpoints = viewpoints.reshape(batch_size, self.num_views, 3)
+
+        return imges, viewpoints
 
 
     def __getitem__(self, idx):
         faces, vertices = self.get_meshes_for_views(idx)
-        print("faces, vertices", faces.shape, vertices.shape)
 
         viewpoints = self.get_surrounding_viewpoints()
-        print("viewpoints", viewpoints.shape)
         images = self.render_images(faces, vertices, viewpoints)
-        print("images", images.shape)
 
         return images, viewpoints
 
