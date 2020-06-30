@@ -151,10 +151,8 @@ class Model(nn.Module):
         batch_size, num_views, _, _, _ = images.shape
 
         # generate meshes
-        print("imgs", images.shape)
         vertices, faces = self.reconstruct(images)
         num_vertices, num_faces = vertices.shape[1], faces.shape[1]
-        print("verts", vertices.shape)
         assert vertices.shape == (batch_size, num_vertices, 3)
         assert faces.shape == (batch_size, num_faces, 3)
 

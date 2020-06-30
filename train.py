@@ -1,3 +1,5 @@
+print("Importing libs")
+
 import argparse
 
 import torch
@@ -40,6 +42,8 @@ VIEWS = 24
 
 RESUME_PATH = ''
 
+print("Parsing args")
+
 # arguments
 parser = argparse.ArgumentParser()
 parser.add_argument('-eid', '--experiment-id', type=str)
@@ -63,6 +67,7 @@ parser.add_argument('-df', '--demo-freq', type=int, default=DEMO_FREQ)
 parser.add_argument('-sf', '--save-freq', type=int, default=SAVE_FREQ)
 parser.add_argument('-s', '--seed', type=int, default=RANDOM_SEED)
 args = parser.parse_args()
+
 
 torch.backends.cudnn.deterministic = True
 torch.manual_seed(args.seed)
@@ -99,7 +104,6 @@ def train():
     data_time = AverageMeter()
     losses = AverageMeter()
 
-    images, viewpoints = dataset_train.get_random_batch(args.batch_size)
     for i in range(start_iter, args.num_iterations + 1):
         # adjust learning rate and sigma_val (decay after 150k iter)
         lr = adjust_learning_rate([optimizer], args.learning_rate,
@@ -107,7 +111,7 @@ def train():
         model.set_sigma(adjust_sigma(args.sigma_val, i))
 
         # load images from multi-view
-        # images, viewpoints = dataset_train.get_random_batch(args.batch_size)
+        images, viewpoints = dataset_train.get_random_batch(args.batch_size)
 
         # soft render images
         model_images, laplacian_loss, flatten_loss = model(images, viewpoints)

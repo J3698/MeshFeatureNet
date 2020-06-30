@@ -22,6 +22,7 @@ class ModelNet40():
         self.num_views = num_views
         self.deg_per_view = 360 / self.num_views
         self.image_size = image_size
+        self.rand_b = None
         self.renderer = sr.SoftRenderer(image_size=image_size,
                                 sigma_val=sigma_val, aggr_func_rgb='hard',
                                 camera_mode='look_at',
@@ -56,8 +57,9 @@ class ModelNet40():
 
 
     def get_random_batch(self, batch_size):
-        images_and_viewpoints = \
-            [self[np.random.randint(0, len(self) - 1)] for i in range(batch_size)]
+        if self.rand_b is None:
+            self.rand_b = np.random.randint(0, len(self) - 1)
+        images_and_viewpoints = [self[self.rand_b] for i in range(batch_size)]
         images, viewpoints = zip(*images_and_viewpoints)
 
         images = torch.cat(images, dim = 0)
