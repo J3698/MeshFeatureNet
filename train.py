@@ -26,8 +26,8 @@ NUM_ITERATIONS = 250000
 LAMBDA_LAPLACIAN = 5e-3
 LAMBDA_FLATTEN = 5e-4
 
-PRINT_FREQ = 100
-DEMO_FREQ = 1000
+PRINT_FREQ = 10
+DEMO_FREQ = 50
 SAVE_FREQ = 10000
 RANDOM_SEED = 0
 
@@ -148,8 +148,8 @@ def train():
             demo_fake_images = model_images[0:24]
             print("demo input imgs", demo_input_images.shape)
             print("demo fake imgs", demo_fake_images.shape)
-            fake_img_path = '%07d_fake.gif' % i
-            input_img_path = '%07d_input.gif' % i
+            fake_img_path = 'gifs/%07d_fake.gif' % i
+            input_img_path = 'gifs/%07d_input.gif' % i
             imgs_to_gif(demo_fake_images, fake_img_path)
             imgs_to_gif(demo_input_images, input_img_path)
 

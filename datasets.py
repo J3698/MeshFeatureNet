@@ -28,8 +28,8 @@ class ModelNet40():
                                 camera_mode='look_at',
                                 viewing_angle=self.deg_per_view,
                                 dist_eps=1e-10)
-        self.save_test_render()
         print(self)
+        self.save_test_render()
 
     def __repr__(self):
         template = "Partition: {}\nFolder: {}\nModels: {}\nSample model path: {}"
