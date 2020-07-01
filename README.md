@@ -8,3 +8,4 @@ To install SoftRas, use the dockerfile or install it manually at
 delete SoftRas' build folder may cause issues.
 
 To download the dataset, run ./data/download_dataset.sh
+TODO: remove .png files from dataset
