@@ -69,7 +69,7 @@ class Decoder(nn.Module):
         self.nf = self.faces.size(0)
         self.centroid_scale = centroid_scale
         self.bias_scale = bias_scale
-        self.obj_scale = 0.5
+        self.obj_scale = .5
 
         dim = 1024
         dim_hidden = [dim, dim*2]
@@ -77,6 +77,7 @@ class Decoder(nn.Module):
         self.fc2 = nn.Linear(dim_hidden[0], dim_hidden[1])
         self.fc_centroid = nn.Linear(dim_hidden[1], 3)
         self.fc_bias = nn.Linear(dim_hidden[1], self.nv*3)
+
 
     def forward(self, x):
         batch_size = x.shape[0]
@@ -112,6 +113,7 @@ class Model(nn.Module):
     def __init__(self, filename_obj, args):
         super(Model, self).__init__()
 
+        self.args = args
         self.encoder = Encoder(im_size=args.image_size)
         self.decoder = Decoder(filename_obj)
         self.renderer = sr.SoftRenderer(image_size=args.image_size, sigma_val=args.sigma_val, 
@@ -127,6 +129,20 @@ class Model(nn.Module):
 
     def set_sigma(self, sigma):
         self.renderer.set_sigma(sigma)
+
+
+    def compute_features(self, images):
+        # assert shape
+        batch_size = images.shape[0]
+        num_views = images.shape[1]
+        img_size = self.args.image_size
+        # 4 for rgba
+        assert images.shape == (batch_size, num_views, 4, img_size, img_size) 
+
+        # compute features
+        feats = self.encoder(images)
+        assert feats.shape == (batch_size, self.encoder.dim_out)
+        return feats
 
 
     def reconstruct(self, images):
