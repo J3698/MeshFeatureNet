@@ -114,6 +114,12 @@ train_loader = DataLoader(dataset_train, batch_size = args.batch_size, shuffle =
 
 cat_map = dataset_train.categories
 
+renderer = sr.SoftRenderer(image_size=args.image_size,
+                    sigma_val=args.sigma_val, aggr_func_rgb='hard',
+                    camera_mode='look_at',
+                    viewing_angle=360 / VIEWS,
+                    dist_eps=1e-10)
+
 def get_svm_data(data_loader):
     print("Getting SVM features")
     x_data = []
@@ -154,18 +160,35 @@ def train():
     data_time = AverageMeter()
     losses = AverageMeter()
 
-    for i, data in enumerate(train_loader):
-        images, viewpoints, categories = data
-        train_batch(images, viewpoints, categories, losses, i, batch_time)
-
-        batch_time.update(time.time() - end)
-        end = time.time()
+    for i, paths in enumerate(train_loader):
+        data = [render_images(path) for path in paths]
+        images, viewpoints = zip(*data)
 
         del images
         del viewpoints
-        del categories
 
+def render_images(path):
+    elevation, distance, deg_per_view = 30., 2.732, 360 / VIEWS
 
+    # get mesh
+    mesh = sr.Mesh.from_obj(path)
+    vertices = torch.cat(VIEWS * [mesh.vertices])
+    faces = torch.cat(VIEWS * [mesh.faces])
+
+    # get viewpoints
+    distances = torch.ones(VIEWS).float() * distance
+    elevations = torch.ones(VIEWS).float() * elevation
+    rotations = (-torch.arange(0, VIEWS) * deg_per_view).float()
+    viewpoints = srf.get_points_from_angles(distances, elevations, rotations)
+
+    # render images
+    renderer.transform.set_eyes(viewpoints)
+    images = renderer(vertices, faces)
+
+    del faces
+    del vertices
+
+    return images, viewpoints
 
 def train_batch(images, viewpoints, categories, losses, i, batch_time):
     # forward
@@ -178,11 +201,13 @@ def train_batch(images, viewpoints, categories, losses, i, batch_time):
     images_reshaped = images.reshape(model_images.shape)
     assert images_reshaped.shape == (BATCH_SIZE * VIEWS, 4,
                                      args.image_size, args.image_size)
+
     # compute loss
     loss = multiview_iou_loss(images, model_images) + \
            args.lambda_laplacian * laplacian_loss_avg + \
            args.lambda_flatten * flatten_loss_avg
     losses.update(loss.data.item(), model_images.size(0))
+
     # compute gradient and optimize
     optimizer.zero_grad()
     loss.backward()
@@ -216,8 +241,8 @@ def print_iteration_info(i, batch_time, losses, lr):
                                  lr=lr, sv=model.renderer.rasterizer.sigma_val))
 
 def save_demo_images(images, model_images, i):
-    demo_input_images = images[0:24]
-    demo_fake_images = model_images[0:24]
+    demo_input_images = images[0:VIEWS]
+    demo_fake_images = model_images[0:VIEWS]
     fake_img_path = 'gifs/%07d_fake.gif' % i
     input_img_path = 'gifs/%07d_input.gif' % i
     imgs_to_gif(demo_fake_images, fake_img_path)

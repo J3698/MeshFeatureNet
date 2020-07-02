@@ -22,17 +22,15 @@ class ModelNet40():
         self.num_views = num_views
         self.deg_per_view = 360 / self.num_views
         self.image_size = image_size
-        self.renderer = sr.SoftRenderer(image_size=image_size,
-                                sigma_val=sigma_val, aggr_func_rgb='hard',
-                                camera_mode='look_at',
-                                viewing_angle=self.deg_per_view,
-                                dist_eps=1e-10)
-        print(self)
-        self.save_test_render()
+        self.sigma_val = sigma_val
     
+
         self.categories = self.get_categories()
+        print(self)
+        # self.save_test_render()
         self.categories = dict((cat, idx) for idx, cat in 
                             enumerate(self.categories))
+
 
     def __repr__(self):
         template = ("Partition: {}\nFolder: {}\nModels: {}"
@@ -58,40 +56,8 @@ class ModelNet40():
 
 
     def save_test_render(self, idx = 0):
-        imgs = torch.chunk(self[idx][0], 24, dim = 0)
+        imgs = torch.chunk(self[idx][0], self.num_views, dim = 0)
         imgs_to_gif(imgs, 'rotation{}.gif'.format(idx))
-
-
-    """
-    def get_random_batch(self, batch_size):
-        random_obj_id = lambda: np.random.randint(0, len(self) - 1)
-        datapoints = [self[random_obj_id()] for i in range(batch_size)]
-        images, viewpoints, categories = zip(*datapoints)
-
-        images = torch.cat(images, dim = 0)
-        images = images.unsqueeze(0)
-        imges = images.reshape(batch_size, self.num_views, 4, 
-                               self.image_size, self.image_size)
-        viewpoints = torch.cat(viewpoints, dim = 0)
-        viewpoints = viewpoints.unsqueeze(0)
-        viewpoints = viewpoints.reshape(batch_size, self.num_views, 3)
-
-        return imges, viewpoints, categories
-    """
-
-
-    def __getitem__(self, idx):
-        faces, vertices = self.get_meshes_for_views(idx)
-
-
-        viewpoints = self.get_surrounding_viewpoints()
-        images = self.render_images(faces, vertices, viewpoints)
-        category = self.get_category(idx)
-
-        del faces
-        del vertices
-
-        return images, viewpoints, category
 
 
     def get_categories(self):
@@ -105,15 +71,14 @@ class ModelNet40():
         category = os.path.split(category_folder)[1]
         return category
 
-    def get_meshes_for_views(self, idx):
-        try:
-            mesh = sr.Mesh.from_obj(self.paths[idx])
-        except UnicodeDecodeError as e:
-            print(self.paths[idx])
-            raise e from None
 
-        vertices = torch.cat(self.num_views * [mesh.vertices.cuda()])
-        faces = torch.cat(self.num_views * [mesh.faces.cuda()])
+    def __getitem__(self, idx):
+
+        return self.paths[idx]
+
+
+
+    def get_meshes_for_views(self, idx):
 
         self.center_vertices(vertices)
         self.scale_vertices(vertices)
@@ -134,16 +99,10 @@ class ModelNet40():
 
 
     def get_surrounding_viewpoints(self):
-        distances = torch.ones(self.num_views).float() * self.distance
-        elevations = torch.ones(self.num_views).float() * self.elevation
-        rotations = (-torch.arange(0, self.num_views) * self.deg_per_view).float()
-        viewpoints = srf.get_points_from_angles(distances, elevations, rotations)
-        return viewpoints.cuda()
+        return viewpoints
 
 
     def render_images(self, faces, vertices, viewpoints):
-        self.renderer.transform.set_eyes(viewpoints)
-        images = self.renderer(vertices, faces)
         return images
 
 
