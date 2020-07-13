@@ -7,7 +7,7 @@ import numpy as np
 import tqdm
 from utils import imgs_to_gif
 
-class ModelNet40():
+class ModelNet40(Dataset):
     def __init__(self, folder, image_size, sigma_val, num_views, partition=None):
         """
         Dataset returns rendered images of object
@@ -73,8 +73,7 @@ class ModelNet40():
 
 
     def __getitem__(self, idx):
-
-        return self.paths[idx]
+        return  self.paths[idx]
 
 
 

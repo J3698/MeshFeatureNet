@@ -71,22 +71,25 @@ parser.add_argument('-sf', '--save-freq', type=int, default=SAVE_FREQ)
 parser.add_argument('-s', '--seed', type=int, default=RANDOM_SEED)
 args = parser.parse_args()
 
-print("Setting up torch/np")
+print("Setting randomness")
 
 torch.backends.cudnn.deterministic = True
 torch.manual_seed(args.seed)
 torch.cuda.manual_seed_all(args.seed)
 np.random.seed(args.seed)
 
+print("Setting directories")
 directory_output = os.path.join(args.model_directory, args.experiment_id)
 os.makedirs(directory_output, exist_ok=True)
 image_output = os.path.join(directory_output, 'pic')
 os.makedirs(image_output, exist_ok=True)
 
+print("Creating model")
 # setup model & optimizer
 model = models.Model('data/obj/sphere/sphere_1352.obj', args=args)
 model = model.cuda()
 
+print("Setting up optimizer")
 optimizer = torch.optim.Adam(model.model_param(), args.learning_rate)
 
 start_iter = START_ITERATION
@@ -152,6 +155,13 @@ def test_accuracy():
     return acc
         
 
+elevation, distance, deg_per_view = 30., 2.732, 360 / VIEWS
+distances = torch.ones(VIEWS).float() * distance
+elevations = torch.ones(VIEWS).float() * elevation
+rotations = (-torch.arange(0, VIEWS) * deg_per_view).float()
+viewpoints = srf.get_points_from_angles(distances, elevations, rotations)
+viewpoints = torch.chunk(viewpoints, 6)
+
 def train():
     print("Starting to train")
 
@@ -161,34 +171,32 @@ def train():
     losses = AverageMeter()
 
     for i, paths in enumerate(train_loader):
-        data = [render_images(path) for path in paths]
-        images, viewpoints = zip(*data)
+        print()
+        print(paths)
+        images = [render_images(path) for path in paths]
+        images = [i.cpu() for i in images]
 
         del images
-        del viewpoints
 
 def render_images(path):
-    elevation, distance, deg_per_view = 30., 2.732, 360 / VIEWS
-
-    # get mesh
+    #print(torch.cuda.memory_allocated())
+    # get vertices and faces
     mesh = sr.Mesh.from_obj(path)
-    vertices = torch.cat(VIEWS * [mesh.vertices])
-    faces = torch.cat(VIEWS * [mesh.faces])
-
-    # get viewpoints
-    distances = torch.ones(VIEWS).float() * distance
-    elevations = torch.ones(VIEWS).float() * elevation
-    rotations = (-torch.arange(0, VIEWS) * deg_per_view).float()
-    viewpoints = srf.get_points_from_angles(distances, elevations, rotations)
-
+    vertices = torch.cat(VIEWS//6 * [mesh.vertices])
+    faces = torch.cat(VIEWS//6 * [mesh.faces])
+    print(path[20:], vertices.shape, faces.shape)
     # render images
-    renderer.transform.set_eyes(viewpoints)
+    # images = torch.tensor([3, 2, 1])
+    renderer.transform.set_eyes(viewpoints[0])
     images = renderer(vertices, faces)
+    for i in viewpoints[1:]:
+        renderer.transform.set_eyes(i)
+        images = torch.cat((images, renderer(vertices, faces)))
 
     del faces
     del vertices
 
-    return images, viewpoints
+    return images
 
 def train_batch(images, viewpoints, categories, losses, i, batch_time):
     # forward
