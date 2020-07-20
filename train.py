@@ -148,8 +148,8 @@ def train():
             demo_fake_images = model_images[0:24]
             print("demo input imgs", demo_input_images.shape)
             print("demo fake imgs", demo_fake_images.shape)
-            fake_img_path = '%07d_fake.gif' % i
-            input_img_path = '%07d_input.gif' % i
+            fake_img_path = '%07d_fake_.gif' % i
+            input_img_path = '%07d_input_.gif' % i
             imgs_to_gif(demo_fake_images, fake_img_path)
             imgs_to_gif(demo_input_images, input_img_path)
 
