@@ -58,8 +58,8 @@ class ModelNet40():
 
     def get_random_batch(self, batch_size):
         if self.rand_b is None:
-            self.rand_b = np.random.randint(0, len(self) - 1)
-        images_and_viewpoints = [self[self.rand_b] for i in range(batch_size)]
+            self.rand_b = [np.random.randint(0, len(self) - 1) for i in range(batch_size)]
+        images_and_viewpoints = [self[i] for i in self.rand_b]
         images, viewpoints = zip(*images_and_viewpoints)
 
         images = torch.cat(images, dim = 0)
