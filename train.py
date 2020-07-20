@@ -22,7 +22,7 @@ CLASS_IDS_ALL = (
     '02691156,02828884,02933112,02958343,03001627,03211117,03636649,' +
     '03691459,04090263,04256520,04379243,04401088,04530566')
 
-BATCH_SIZE = 16
+BATCH_SIZE = 1
 LEARNING_RATE = 1e-4
 LR_TYPE = 'step'
 NUM_ITERATIONS = 250000
@@ -160,21 +160,22 @@ def train():
     data_time = AverageMeter()
     losses = AverageMeter()
 
-    for i, paths in enumerate(train_loader):
-        paths = [dataset_train[i] for i in range(16)]
-        data = [render_images(path) for path in paths]
-        images, viewpoints = zip(*data)
-        images = torch.cat([i.unsqueeze(0) for i in images], axis = 0)
-        viewpoints = torch.cat([v.unsqueeze(0) for v in viewpoints], axis = 0)
-        #print(images.shape)
-        #print(viewpoints.shape)
-        categories = None
-        train_batch(images, viewpoints, categories, losses, i, batch_time)
-        batch_time.update(time.time() - end)
-        end = time.time()
+    for i in range(20):
+        for i, paths in enumerate(train_loader):
+            paths = [dataset_train[i] for i in range(1)]
+            data = [render_images(path) for path in paths]
+            images, viewpoints = zip(*data)
+            images = torch.cat([i.unsqueeze(0) for i in images], axis = 0)
+            viewpoints = torch.cat([v.unsqueeze(0) for v in viewpoints], axis = 0)
+            print(images.shape)
+            print(viewpoints.shape)
+            categories = None
+            train_batch(images, viewpoints, categories, losses, i, batch_time)
+            batch_time.update(time.time() - end)
+            end = time.time()
 
-        del images
-        del viewpoints
+            del images
+            del viewpoints
 
 def render_images(path):
     elevation, distance, deg_per_view = 30., 2.732, 360 / VIEWS
@@ -223,7 +224,8 @@ def train_batch(images, viewpoints, categories, losses, i, batch_time):
     optimizer.step()
 
     if i % 100 == 0 and i != 0:
-        print(test_accuracy())
+        pass
+        # print(test_accuracy())
     if i % args.save_freq == 0:
         save_checkpoint(i)
     if i % args.demo_freq == 0:
