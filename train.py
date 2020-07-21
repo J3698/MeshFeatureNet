@@ -22,7 +22,7 @@ CLASS_IDS_ALL = (
     '02691156,02828884,02933112,02958343,03001627,03211117,03636649,' +
     '03691459,04090263,04256520,04379243,04401088,04530566')
 
-BATCH_SIZE = 1
+BATCH_SIZE = 16
 LEARNING_RATE = 1e-4
 LR_TYPE = 'step'
 NUM_ITERATIONS = 250000
@@ -30,7 +30,7 @@ NUM_ITERATIONS = 250000
 LAMBDA_LAPLACIAN = 5e-3
 LAMBDA_FLATTEN = 5e-4
 
-PRINT_FREQ = 5
+PRINT_FREQ = 50
 DEMO_FREQ = 50
 SAVE_FREQ = 10000
 RANDOM_SEED = 0
@@ -38,11 +38,11 @@ RANDOM_SEED = 0
 MODEL_DIRECTORY = 'data/results/models'
 DATASET_DIRECTORY = 'data/MN40Objs'
 
-IMAGE_SIZE = 128
+IMAGE_SIZE = 64
 SIGMA_VAL = 1e-4
 START_ITERATION = 0
 
-VIEWS = 24
+VIEWS = 12
 
 RESUME_PATH = ''
 
@@ -70,6 +70,7 @@ parser.add_argument('-df', '--demo-freq', type=int, default=DEMO_FREQ)
 parser.add_argument('-sf', '--save-freq', type=int, default=SAVE_FREQ)
 parser.add_argument('-s', '--seed', type=int, default=RANDOM_SEED)
 args = parser.parse_args()
+print(args)
 
 print("Setting up torch/np")
 
@@ -162,7 +163,7 @@ def train():
 
     for i in range(20):
         for i, paths in enumerate(train_loader):
-            paths = [dataset_train[i] for i in range(1)]
+            paths = [dataset_train[i] for i in range(BATCH_SIZE)]
             data = [render_images(path) for path in paths]
             images, viewpoints = zip(*data)
             images = torch.cat([i.unsqueeze(0) for i in images], axis = 0)
@@ -254,8 +255,8 @@ def print_iteration_info(i, batch_time, losses, lr):
 def save_demo_images(images, model_images, i):
     demo_input_images = images[0:VIEWS]
     demo_fake_images = model_images[0:VIEWS]
-    fake_img_path = 'gifs/%07d_fake.gif' % i
-    input_img_path = 'gifs/%07d_input.gif' % i
+    fake_img_path = '../gifs_newcode/%07d_fake.gif' % i
+    input_img_path = '../gifs_newcode/%07d_input.gif' % i
     imgs_to_gif(demo_fake_images, fake_img_path)
     imgs_to_gif(demo_input_images, input_img_path)
 

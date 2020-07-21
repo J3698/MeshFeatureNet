@@ -43,7 +43,7 @@ class ModelNet40():
         data = []
         for root, dirs, files in os.walk(self.folder):
             data += [os.path.join(root, f) for f in files]
-        return list(filter(self.filter_partition, data))
+        return sorted(list(filter(self.filter_partition, data)))
 
 
     def filter_partition(self, filepath):
