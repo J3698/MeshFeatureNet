@@ -39,7 +39,7 @@ class ModelNet40():
         data = []
         for root, dirs, files in os.walk(self.folder):
             data += [os.path.join(root, f) for f in files]
-        return list(filter(self.filter_partition, data))
+        return sorted(list(filter(self.filter_partition, data)))
 
 
     def filter_partition(self, filepath):
@@ -57,7 +57,7 @@ class ModelNet40():
 
 
     def get_random_batch(self, batch_size):
-        self.rand_b = [np.random.randint(0, len(self) - 1) for i in range(batch_size)]
+        self.rand_b = [i for i in range(batch_size)]
         images_and_viewpoints = [self[i] for i in self.rand_b]
         images, viewpoints = zip(*images_and_viewpoints)
 

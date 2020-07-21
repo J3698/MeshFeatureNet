@@ -26,8 +26,8 @@ NUM_ITERATIONS = 250000
 LAMBDA_LAPLACIAN = 5e-3
 LAMBDA_FLATTEN = 5e-4
 
-PRINT_FREQ = 100
-DEMO_FREQ = 1000
+PRINT_FREQ = 50
+DEMO_FREQ = 50
 SAVE_FREQ = 10000
 RANDOM_SEED = 0
 
@@ -68,6 +68,8 @@ parser.add_argument('-sf', '--save-freq', type=int, default=SAVE_FREQ)
 parser.add_argument('-s', '--seed', type=int, default=RANDOM_SEED)
 args = parser.parse_args()
 
+print(args)
+print(VIEWS)
 
 torch.backends.cudnn.deterministic = True
 torch.manual_seed(args.seed)
@@ -148,8 +150,8 @@ def train():
             demo_fake_images = model_images[0:VIEWS]
             print("demo input imgs", demo_input_images.shape)
             print("demo fake imgs", demo_fake_images.shape)
-            fake_img_path = '%07d_fake_.gif' % i
-            input_img_path = '%07d_input_.gif' % i
+            fake_img_path = '../gifs_oldcode/%07d_fake_.gif' % i
+            input_img_path = '../gifs_oldcode/%07d_input_.gif' % i
             imgs_to_gif(demo_fake_images, fake_img_path)
             imgs_to_gif(demo_input_images, input_img_path)
 
