@@ -52,13 +52,12 @@ class ModelNet40():
 
 
     def save_test_render(self, idx = 0):
-        imgs = torch.chunk(self[idx][0], 24, dim = 0)
+        imgs = torch.chunk(self[idx][0], self.num_views, dim = 0)
         imgs_to_gif(imgs, 'rotation{}.gif'.format(idx))
 
 
     def get_random_batch(self, batch_size):
-        if self.rand_b is None:
-            self.rand_b = [np.random.randint(0, len(self) - 1) for i in range(batch_size)]
+        self.rand_b = [np.random.randint(0, len(self) - 1) for i in range(batch_size)]
         images_and_viewpoints = [self[i] for i in self.rand_b]
         images, viewpoints = zip(*images_and_viewpoints)
 
@@ -114,9 +113,14 @@ class ModelNet40():
 
 
     def render_images(self, faces, vertices, viewpoints):
-        self.renderer.transform.set_eyes(viewpoints)
-        images = self.renderer(vertices, faces)
-        return images
+        faces = torch.chunk(faces, 6)
+        vertices = torch.chunk(vertices, 6)
+        viewpoints = torch.chunk(viewpoints, 6)
+        images = []
+        for views, v, f in zip(viewpoints, vertices, faces):
+            self.renderer.transform.set_eyes(views)
+            images.append(self.renderer(v, f))
+        return torch.cat(images)
 
 
     def __len__(self):

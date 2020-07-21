@@ -34,11 +34,11 @@ RANDOM_SEED = 0
 MODEL_DIRECTORY = 'data/results/models'
 DATASET_DIRECTORY = 'data/MN40Objs'
 
-IMAGE_SIZE = 128
+IMAGE_SIZE = 64
 SIGMA_VAL = 1e-4
 START_ITERATION = 0
 
-VIEWS = 24
+VIEWS = 12
 
 RESUME_PATH = ''
 
@@ -144,8 +144,8 @@ def train():
 
         # save demo images
         if i % args.demo_freq == 0:
-            demo_input_images = images[0:24]
-            demo_fake_images = model_images[0:24]
+            demo_input_images = images[0:VIEWS]
+            demo_fake_images = model_images[0:VIEWS]
             print("demo input imgs", demo_input_images.shape)
             print("demo fake imgs", demo_fake_images.shape)
             fake_img_path = '%07d_fake_.gif' % i
