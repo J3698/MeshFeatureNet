@@ -1,3 +1,4 @@
+print("Old code experiment")
 print("Importing libs")
 
 import argparse
@@ -13,6 +14,7 @@ import models
 import imageio
 import time
 import os
+import datetime
 
 CLASS_IDS_ALL = (
     '02691156,02828884,02933112,02958343,03001627,03211117,03636649,' +
