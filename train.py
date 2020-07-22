@@ -31,7 +31,7 @@ DEMO_FREQ = 50
 SAVE_FREQ = 300
 RANDOM_SEED = 0
 
-MODEL_DIRECTORY = 'data/results/models'
+MODEL_DIRECTORY = '../results/models'
 DATASET_DIRECTORY = 'data/MN40Objs'
 
 IMAGE_SIZE = 64
@@ -76,10 +76,14 @@ torch.manual_seed(args.seed)
 torch.cuda.manual_seed_all(args.seed)
 np.random.seed(args.seed)
 
-directory_output = os.path.join(args.model_directory, args.experiment_id)
+experiment_id = str(datetime.datetime.now()).replace(" ", "-")
+print(experiment_id)
+directory_output = os.path.join(args.model_directory, experiment_id)
 os.makedirs(directory_output, exist_ok=True)
 image_output = os.path.join(directory_output, 'pic')
 os.makedirs(image_output, exist_ok=True)
+print(directory_output)
+print(image_output)
 
 # setup model & optimizer
 model = models.Model('data/obj/sphere/sphere_642.obj', args=args)
