@@ -4,6 +4,7 @@ import argparse
 
 import torch
 from torch.utils.data import DataLoader
+import torch.nn as nn
 import numpy as np
 from losses import multiview_iou_loss
 from utils import AverageMeter, imgs_to_gif
@@ -51,9 +52,12 @@ RESUME_PATH = ''
 
 TIME = str(datetime.now()).replace(" ", "-")
 
+TRAIN_TRUNCATION = None
+
 # arguments
 parser = argparse.ArgumentParser()
 parser.add_argument('-eid', '--experiment-id', type=str, default=TIME)
+parser.add_argument('-tt', '--train-truncation', type=str, default=TRAIN_TRUNCATION)
 parser.add_argument('-md', '--model-directory', type=str, default=MODEL_DIRECTORY)
 parser.add_argument('-r', '--resume-path', type=str, default=RESUME_PATH)
 parser.add_argument('-dd', '--dataset-directory', type=str, default=DATASET_DIRECTORY)
@@ -92,9 +96,13 @@ os.makedirs(image_output, exist_ok=True)
 
 # setup model & optimizer
 model = models.Model('data/obj/sphere/sphere_1352.obj', args=args)
+
+print("GPUs: {}".format(torch.cuda.device_count()))
+if torch.cuda.device_count() > 1:
+    model = nn.DataParallel(model)
 model = model.cuda()
 
-optimizer = torch.optim.Adam(model.model_param(), args.learning_rate)
+optimizer = torch.optim.Adam(model.module.model_param(), args.learning_rate)
 
 start_iter = START_ITERATION
 if args.resume_path:
@@ -107,7 +115,7 @@ if args.resume_path:
  
 print()
 
-dataset_train = datasets.ModelNet40(args.dataset_directory, partition='train')
+dataset_train = datasets.ModelNet40(args.dataset_directory, partition='train', truncate = args.train_truncation)
 dataset_test = datasets.ModelNet40(args.dataset_directory, partition='test')
 
 
@@ -129,9 +137,9 @@ def get_svm_data(data_loader):
         batch_size = len(images)
         assert batch_size == len(categories) and batch_size == len(viewpoints)
 
-        feats = model.compute_features(images).detach().cpu()
+        feats = model.module.compute_features(images).detach().cpu()
         feats = [i for i in feats]
-        assert all(len(feat) == model.encoder.dim_out for feat in feats)
+        assert all(len(feat) == model.module.encoder.dim_out for feat in feats)
 
         answers = [cat_map[j] for j in categories]
         x_data += feats
@@ -182,7 +190,7 @@ def train_batch(images, viewpoints, categories, losses, i, e, batch_time):
     # forward
     lr = adjust_learning_rate([optimizer], args.learning_rate,
                               i, method=args.lr_type)
-    model.set_sigma(adjust_sigma(args.sigma_val, i))
+    model.module.set_sigma(adjust_sigma(args.sigma_val, i))
     model_images, laplacian_loss, flatten_loss = model(images, viewpoints)
     laplacian_loss_avg = laplacian_loss.mean()
     flatten_loss_avg = flatten_loss.mean()
@@ -227,7 +235,7 @@ def print_iteration_info(i, epoch, batch_time, losses, lr):
           'lr {lr:.6f}\t'
           'sv {sv:.6f}\t'.format(i, epoch,
                                  batch_time=batch_time, loss=losses, 
-                                 lr=lr, sv=model.renderer.rasterizer.sigma_val))
+                                 lr=lr, sv=model.module.renderer.rasterizer.sigma_val))
 
 
 def save_demo_images(images, model_images, i):
