@@ -14,7 +14,9 @@ import datasets
 import models
 import imageio
 import time
+from datetime import datetime
 import os
+from ground_truth_rendering import GroundTruthRenderer
 
 print("Parsing args")
 
@@ -22,39 +24,43 @@ CLASS_IDS_ALL = (
     '02691156,02828884,02933112,02958343,03001627,03211117,03636649,' +
     '03691459,04090263,04256520,04379243,04401088,04530566')
 
-BATCH_SIZE = 1
+BATCH_SIZE = 16
 LEARNING_RATE = 1e-4
 LR_TYPE = 'step'
-NUM_ITERATIONS = 250000
 
 LAMBDA_LAPLACIAN = 5e-3
 LAMBDA_FLATTEN = 5e-4
 
 PRINT_FREQ = 5
 DEMO_FREQ = 50
-SAVE_FREQ = 10000
+SAVE_FREQ = 100
 RANDOM_SEED = 0
 
 MODEL_DIRECTORY = 'data/results/models'
 DATASET_DIRECTORY = 'data/MN40Objs'
 
-IMAGE_SIZE = 128
+IMAGE_SIZE = 64
 SIGMA_VAL = 1e-4
 START_ITERATION = 0
+
+EPOCHS = 100
 
 VIEWS = 24
 
 RESUME_PATH = ''
 
+TIME = str(datetime.now()).replace(" ", "-")
 
 # arguments
 parser = argparse.ArgumentParser()
-parser.add_argument('-eid', '--experiment-id', type=str)
+parser.add_argument('-eid', '--experiment-id', type=str, default=TIME)
 parser.add_argument('-md', '--model-directory', type=str, default=MODEL_DIRECTORY)
 parser.add_argument('-r', '--resume-path', type=str, default=RESUME_PATH)
 parser.add_argument('-dd', '--dataset-directory', type=str, default=DATASET_DIRECTORY)
 parser.add_argument('-cls', '--class-ids', type=str, default=CLASS_IDS_ALL)
 parser.add_argument('-is', '--image-size', type=int, default=IMAGE_SIZE)
+parser.add_argument('-v', '--views', type=int, default=VIEWS)
+parser.add_argument('-e', '--epochs', type=int, default=EPOCHS)
 parser.add_argument('-b', '--batch-size', type=int, default=BATCH_SIZE)
 
 parser.add_argument('-sv', '--sigma-val', type=float, default=SIGMA_VAL)
@@ -64,12 +70,13 @@ parser.add_argument('-lrt', '--lr-type', type=str, default=LR_TYPE)
 
 parser.add_argument('-ll', '--lambda-laplacian', type=float, default=LAMBDA_LAPLACIAN)
 parser.add_argument('-lf', '--lambda-flatten', type=float, default=LAMBDA_FLATTEN)
-parser.add_argument('-ni', '--num-iterations', type=int, default=NUM_ITERATIONS)
 parser.add_argument('-pf', '--print-freq', type=int, default=PRINT_FREQ)
 parser.add_argument('-df', '--demo-freq', type=int, default=DEMO_FREQ)
 parser.add_argument('-sf', '--save-freq', type=int, default=SAVE_FREQ)
 parser.add_argument('-s', '--seed', type=int, default=RANDOM_SEED)
+
 args = parser.parse_args()
+print(args)
 
 print("Setting up torch/np")
 
@@ -100,25 +107,18 @@ if args.resume_path:
  
 print()
 
-dataset_train = datasets.ModelNet40(args.dataset_directory,
-                                    args.image_size, args.sigma_val,
-                                    VIEWS, partition='train')
-dataset_test = datasets.ModelNet40(args.dataset_directory,
-                                   args.image_size, args.sigma_val,
-                                   VIEWS, partition='test')
+dataset_train = datasets.ModelNet40(args.dataset_directory, partition='train')
+dataset_test = datasets.ModelNet40(args.dataset_directory, partition='test')
 
 
 test_loader = DataLoader(dataset_test, batch_size = args.batch_size, shuffle = False)
 train_loader = DataLoader(dataset_train, batch_size = args.batch_size, shuffle = True)
 
 
+gtr = GroundTruthRenderer(args.image_size, args.sigma_val, args.views)
+
 cat_map = dataset_train.categories
 
-renderer = sr.SoftRenderer(image_size=args.image_size,
-                    sigma_val=args.sigma_val, aggr_func_rgb='hard',
-                    camera_mode='look_at',
-                    viewing_angle=360 / VIEWS,
-                    dist_eps=1e-10)
 
 def get_svm_data(data_loader):
     print("Getting SVM features")
@@ -160,47 +160,25 @@ def train():
     data_time = AverageMeter()
     losses = AverageMeter()
 
-    for i in range(20):
-        for i, paths in enumerate(train_loader):
-            paths = [dataset_train[i] for i in range(1)]
-            data = [render_images(path) for path in paths]
+    batch_num = 0
+    for e in range(args.epochs):
+        for j, paths in enumerate(train_loader):
+            data = [gtr.render_ground_truth(path) for path in paths]
             images, viewpoints = zip(*data)
-            images = torch.cat([i.unsqueeze(0) for i in images], axis = 0)
+            images = torch.cat([k.unsqueeze(0) for k in images], axis = 0)
             viewpoints = torch.cat([v.unsqueeze(0) for v in viewpoints], axis = 0)
-            print(images.shape)
-            print(viewpoints.shape)
             categories = None
-            train_batch(images, viewpoints, categories, losses, i, batch_time)
+            train_batch(images, viewpoints, categories, losses, batch_num, e, batch_time)
             batch_time.update(time.time() - end)
-            end = time.time()
 
+            batch_num += 1
+            end = time.time()
             del images
             del viewpoints
 
-def render_images(path):
-    elevation, distance, deg_per_view = 30., 2.732, 360 / VIEWS
 
-    # get mesh
-    mesh = sr.Mesh.from_obj(path)
-    vertices = torch.cat(VIEWS * [mesh.vertices])
-    faces = torch.cat(VIEWS * [mesh.faces])
 
-    # get viewpoints
-    distances = torch.ones(VIEWS).float() * distance
-    elevations = torch.ones(VIEWS).float() * elevation
-    rotations = (-torch.arange(0, VIEWS) * deg_per_view).float()
-    viewpoints = srf.get_points_from_angles(distances, elevations, rotations)
-
-    # render images
-    renderer.transform.set_eyes(viewpoints)
-    images = renderer(vertices, faces)
-
-    del faces
-    del vertices
-
-    return images, viewpoints
-
-def train_batch(images, viewpoints, categories, losses, i, batch_time):
+def train_batch(images, viewpoints, categories, losses, i, e, batch_time):
     # forward
     lr = adjust_learning_rate([optimizer], args.learning_rate,
                               i, method=args.lr_type)
@@ -209,7 +187,7 @@ def train_batch(images, viewpoints, categories, losses, i, batch_time):
     laplacian_loss_avg = laplacian_loss.mean()
     flatten_loss_avg = flatten_loss.mean()
     images_reshaped = images.reshape(model_images.shape)
-    assert images_reshaped.shape == (BATCH_SIZE * VIEWS, 4,
+    assert images_reshaped.shape == (args.batch_size * args.views, 4,
                                      args.image_size, args.image_size)
 
     # compute loss
@@ -231,7 +209,7 @@ def train_batch(images, viewpoints, categories, losses, i, batch_time):
     if i % args.demo_freq == 0:
         save_demo_images(images_reshaped, model_images, i)
     if i % args.print_freq == 0:
-        print_iteration_info(i, batch_time, losses, lr)
+        print_iteration_info(i, e, batch_time, losses, lr)
 
     del loss
     del laplacian_loss
@@ -242,22 +220,24 @@ def train_batch(images, viewpoints, categories, losses, i, batch_time):
     del model_images
     del images_reshaped
 
-def print_iteration_info(i, batch_time, losses, lr):
-    print('Iter: [{0}/{1}]\t'
+def print_iteration_info(i, epoch, batch_time, losses, lr):
+    print('Iter: [{0}, {1}]\t'
           'Time {batch_time.val:.3f}\t'
           'Loss {loss.val:.3f}\t'
           'lr {lr:.6f}\t'
-          'sv {sv:.6f}\t'.format(i, args.num_iterations,
+          'sv {sv:.6f}\t'.format(i, epoch,
                                  batch_time=batch_time, loss=losses, 
                                  lr=lr, sv=model.renderer.rasterizer.sigma_val))
 
+
 def save_demo_images(images, model_images, i):
-    demo_input_images = images[0:VIEWS]
-    demo_fake_images = model_images[0:VIEWS]
-    fake_img_path = 'gifs/%07d_fake.gif' % i
-    input_img_path = 'gifs/%07d_input.gif' % i
+    demo_input_images = images[0:args.views]
+    demo_fake_images = model_images[0:args.views]
+    fake_img_path = os.path.join(image_output,'%07d_fake.gif' % i)
+    input_img_path = os.path.join(image_output, '%07d_input.gif' % i)
     imgs_to_gif(demo_fake_images, fake_img_path)
     imgs_to_gif(demo_input_images, input_img_path)
+
 
 def save_checkpoint(i):
     model_path = os.path.join(directory_output, 'checkpoint_%07d.pth.tar'%i)
@@ -265,6 +245,7 @@ def save_checkpoint(i):
         'model': model.state_dict(),
         'optimizer': optimizer.state_dict(),
         }, model_path)
+
 
 def adjust_learning_rate(optimizers, learning_rate, i, method):
     if method == 'step':
