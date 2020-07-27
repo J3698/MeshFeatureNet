@@ -54,6 +54,8 @@ TIME = str(datetime.now()).replace(" ", "-")
 
 TRAIN_TRUNCATION = 16
 
+NUM_DEMO_IMGS = 2
+
 # arguments
 parser = argparse.ArgumentParser()
 parser.add_argument('-eid', '--experiment-id', type=str, default=TIME)
@@ -78,6 +80,7 @@ parser.add_argument('-pf', '--print-freq', type=int, default=PRINT_FREQ)
 parser.add_argument('-df', '--demo-freq', type=int, default=DEMO_FREQ)
 parser.add_argument('-sf', '--save-freq', type=int, default=SAVE_FREQ)
 parser.add_argument('-s', '--seed', type=int, default=RANDOM_SEED)
+parser.add_argument('-ndi', '--num-demo-imgs', type=int, default=NUM_DEMO_IMGS)
 
 args = parser.parse_args()
 print(args)
@@ -175,6 +178,8 @@ def train():
             images, viewpoints = zip(*data)
             images = torch.cat([k.unsqueeze(0) for k in images], axis = 0)
             viewpoints = torch.cat([v.unsqueeze(0) for v in viewpoints], axis = 0)
+            if batch_num == 0:
+                print(images.shape, viewpoints.shape)
             categories = None
             train_batch(images, viewpoints, categories, losses, batch_num, e, batch_time)
             batch_time.update(time.time() - end)
@@ -192,16 +197,19 @@ def train_batch(images, viewpoints, categories, losses, i, e, batch_time):
                               i, method=args.lr_type)
     model.module.set_sigma(adjust_sigma(args.sigma_val, i))
     model_images, laplacian_loss, flatten_loss = model(images, viewpoints)
-    laplacian_loss_avg = laplacian_loss.mean()
-    flatten_loss_avg = flatten_loss.mean()
+    laplacian_loss_avg = laplacian_loss.mean() * args.lambda_laplacian
+    flatten_loss_avg = flatten_loss.mean() * args.lambda_flatten
     images_reshaped = images.reshape(model_images.shape)
     assert images_reshaped.shape == (args.batch_size * args.views, 4,
                                      args.image_size, args.image_size)
 
+    mv_iou_loss = multiview_iou_loss(images, model_images)
+    if i % args.print_freq == 0:
+        print("iou, lap, flat", mv_iou_loss.item(),
+              laplacian_loss_avg.item(), flatten_loss_avg.item())
+
     # compute loss
-    loss = multiview_iou_loss(images, model_images) + \
-           args.lambda_laplacian * laplacian_loss_avg + \
-           args.lambda_flatten * flatten_loss_avg
+    loss = mv_iou_loss + laplacian_loss_avg + flatten_loss_avg
     losses.update(loss.data.item(), model_images.size(0))
 
     # compute gradient and optimize
@@ -219,14 +227,6 @@ def train_batch(images, viewpoints, categories, losses, i, e, batch_time):
     if i % args.print_freq == 0:
         print_iteration_info(i, e, batch_time, losses, lr)
 
-    del loss
-    del laplacian_loss
-    del flatten_loss
-    del laplacian_loss_avg
-    del flatten_loss_avg
-    del images
-    del model_images
-    del images_reshaped
 
 def print_iteration_info(i, epoch, batch_time, losses, lr):
     print('Iter: [{0}, {1}]\t'
@@ -239,8 +239,8 @@ def print_iteration_info(i, epoch, batch_time, losses, lr):
 
 
 def save_demo_images(images, model_images, i):
-    demo_input_images = images[0:args.views]
-    demo_fake_images = model_images[0:args.views]
+    demo_input_images = images[0: args.views * args.num_demo_imgs]
+    demo_fake_images = model_images[0: args.views * args.num_demo_imgs]
     fake_img_path = os.path.join(image_output,'%07d_fake.gif' % i)
     input_img_path = os.path.join(image_output, '%07d_input.gif' % i)
     imgs_to_gif(demo_fake_images, fake_img_path)
@@ -260,6 +260,7 @@ def adjust_learning_rate(optimizers, learning_rate, i, method):
         lr, decay = learning_rate, 0.3
         if i >= 150000:
             lr *= decay
+            print("Decaying lr to {}".format(lr))
     elif method == 'constant':
         lr = learning_rate
     else:
@@ -275,6 +276,7 @@ def adjust_sigma(sigma, i):
     decay = 0.3
     if i >= 150000:
         sigma *= decay
+        print("Decaying sigma to {}".format(sigma))
     return sigma
 
 
