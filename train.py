@@ -32,7 +32,7 @@ LR_TYPE = 'step'
 LAMBDA_LAPLACIAN = 5e-3
 LAMBDA_FLATTEN = 5e-4
 
-PRINT_FREQ = 5
+PRINT_FREQ = 16*5
 DEMO_FREQ = 50
 SAVE_FREQ = 100
 RANDOM_SEED = 0
@@ -52,7 +52,7 @@ RESUME_PATH = ''
 
 TIME = str(datetime.now()).replace(" ", "-")
 
-TRAIN_TRUNCATION = 16
+TRAIN_TRUNCATION = 2
 
 NUM_DEMO_IMGS = 2
 
@@ -101,8 +101,8 @@ os.makedirs(image_output, exist_ok=True)
 model = models.Model('data/obj/sphere/sphere_1352.obj', args=args)
 
 print("GPUs: {}".format(torch.cuda.device_count()))
-if torch.cuda.device_count() > 1:
-    model = nn.DataParallel(model)
+# if torch.cuda.device_count() > 1:
+model = nn.DataParallel(model)
 model = model.cuda()
 
 optimizer = torch.optim.Adam(model.module.model_param(), args.learning_rate)
@@ -175,13 +175,15 @@ def train():
     for e in range(args.epochs):
         for j, paths in enumerate(train_loader):
             data = [gtr.render_ground_truth(path) for path in paths]
+            print("b_size", len(data))
             images, viewpoints = zip(*data)
+            print("gt shape", images[0].shape)
             images = torch.cat([k.unsqueeze(0) for k in images], axis = 0)
             viewpoints = torch.cat([v.unsqueeze(0) for v in viewpoints], axis = 0)
             if batch_num == 0:
                 print(images.shape, viewpoints.shape)
             categories = None
-            train_batch(images, viewpoints, categories, losses, batch_num, e, batch_time)
+            train_batch(len(data), images, viewpoints, categories, losses, batch_num, e, batch_time)
             batch_time.update(time.time() - end)
 
             batch_num += 1
@@ -191,7 +193,7 @@ def train():
 
 
 
-def train_batch(images, viewpoints, categories, losses, i, e, batch_time):
+def train_batch(batch_size, images, viewpoints, categories, losses, i, e, batch_time):
     # forward
     lr = adjust_learning_rate([optimizer], args.learning_rate,
                               i, method=args.lr_type)
@@ -199,11 +201,12 @@ def train_batch(images, viewpoints, categories, losses, i, e, batch_time):
     model_images, laplacian_loss, flatten_loss = model(images, viewpoints)
     laplacian_loss_avg = laplacian_loss.mean() * args.lambda_laplacian
     flatten_loss_avg = flatten_loss.mean() * args.lambda_flatten
-    images_reshaped = images.reshape(model_images.shape)
-    assert images_reshaped.shape == (args.batch_size * args.views, 4,
-                                     args.image_size, args.image_size)
 
-    mv_iou_loss = multiview_iou_loss(images, model_images)
+    images_reshaped = images.reshape(model_images.shape)
+    assert_shape(images_reshaped, (batch_size * args.views, 4, args.image_size, args.image_size))
+    assert images_reshaped.shape == model_images.shape, (images.shape, model_images.shape)
+
+    mv_iou_loss = multiview_iou_loss(images_reshaped, model_images)
     if i % args.print_freq == 0:
         print("iou, lap, flat", mv_iou_loss.item(),
               laplacian_loss_avg.item(), flatten_loss_avg.item())
@@ -227,6 +230,10 @@ def train_batch(images, viewpoints, categories, losses, i, e, batch_time):
     if i % args.print_freq == 0:
         print_iteration_info(i, e, batch_time, losses, lr)
 
+def assert_shape(tensor, correct_shape):
+    shape_correct = tensor.shape == correct_shape
+    incorrect_msg = "expected {} actual {}".format(correct_shape, tensor.shape)
+    assert shape_correct, incorrect_msg
 
 def print_iteration_info(i, epoch, batch_time, losses, lr):
     print('Iter: [{0}, {1}]\t'
@@ -264,7 +271,7 @@ def adjust_learning_rate(optimizers, learning_rate, i, method):
     elif method == 'constant':
         lr = learning_rate
     else:
-        print("no such learing rate type")
+        print("no such learning rate type")
 
     for optimizer in optimizers:
         for param_group in optimizer.param_groups:
