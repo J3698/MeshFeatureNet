@@ -44,7 +44,7 @@ IMAGE_SIZE = 64
 SIGMA_VAL = 1e-4
 START_ITERATION = 0
 
-EPOCHS = 100
+EPOCHS = 10000
 
 VIEWS = 12
 
@@ -52,7 +52,7 @@ RESUME_PATH = ''
 
 TIME = str(datetime.now()).replace(" ", "-")
 
-TRAIN_TRUNCATION = None
+TRAIN_TRUNCATION = 16
 
 # arguments
 parser = argparse.ArgumentParser()
@@ -115,7 +115,7 @@ if args.resume_path:
  
 print()
 
-dataset_train = datasets.ModelNet40(args.dataset_directory, partition='train', truncate = args.train_truncation)
+dataset_train = datasets.ModelNet40(args.dataset_directory, partition='train', truncate = args.train_truncation, reverse = True)
 dataset_test = datasets.ModelNet40(args.dataset_directory, partition='test')
 
 

@@ -7,11 +7,14 @@ import tqdm
 from utils import imgs_to_gif
 
 class ModelNet40(Dataset):
-    def __init__(self, folder, partition=None, truncate = None):
+    def __init__(self, folder, partition = None, truncate = None, reverse = False):
         print("Constructing dataset")
         self.partition = partition
         self.folder = folder
         self.paths = sorted(self.load_file_paths())
+        if reverse:
+            print("Reversed")
+            self.paths.reverse()
         if not truncate is None:
             self.paths = self.paths[:min(len(self.paths), truncate)]
         self.categories = self.get_categories()
