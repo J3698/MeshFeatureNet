@@ -32,7 +32,7 @@ LR_TYPE = 'step'
 LAMBDA_LAPLACIAN = 5e-3
 LAMBDA_FLATTEN = 5e-4
 
-PRINT_FREQ = 16*5
+PRINT_FREQ = 50
 DEMO_FREQ = 50
 SAVE_FREQ = 100
 RANDOM_SEED = 0
@@ -52,7 +52,7 @@ RESUME_PATH = ''
 
 TIME = str(datetime.now()).replace(" ", "-")
 
-TRAIN_TRUNCATION = 2
+TRAIN_TRUNCATION = None
 
 NUM_DEMO_IMGS = 2
 
@@ -175,9 +175,7 @@ def train():
     for e in range(args.epochs):
         for j, paths in enumerate(train_loader):
             data = [gtr.render_ground_truth(path) for path in paths]
-            print("b_size", len(data))
             images, viewpoints = zip(*data)
-            print("gt shape", images[0].shape)
             images = torch.cat([k.unsqueeze(0) for k in images], axis = 0)
             viewpoints = torch.cat([v.unsqueeze(0) for v in viewpoints], axis = 0)
             if batch_num == 0:
