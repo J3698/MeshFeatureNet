@@ -32,8 +32,9 @@ class ModelNet40(Dataset):
     def __repr__(self):
         template = ("Partition: {}\nFolder: {}\nModels: {}"
                     "\nSample model path: {}\n")
+        sample_path = "N/A" if len(self.paths) == 0 else self.paths[0]
         return template.format(self.partition, self.folder,
-                               len(self), self.paths[0])
+                               len(self), sample_path)
 
 
     def load_file_paths(self):

@@ -1,22 +1,21 @@
 print("Importing")
 
 import argparse
+import time
+from datetime import datetime
+import os
+
+import numpy as np
+from tqdm import tqdm
 
 import torch
 from torch.utils.data import DataLoader
 import torch.nn as nn
-import numpy as np
-from losses import multiview_iou_loss
+
 from utils import AverageMeter, imgs_to_gif
-import soft_renderer as sr
-import soft_renderer.functional as srf
-from tqdm import tqdm
+from losses import multiview_iou_loss
 import datasets
 import models
-import imageio
-import time
-from datetime import datetime
-import os
 from ground_truth_rendering import GroundTruthRenderer
 
 print("Parsing args")
@@ -33,8 +32,8 @@ LAMBDA_LAPLACIAN = 5e-3
 LAMBDA_FLATTEN = 5e-4
 
 PRINT_FREQ = 50
-DEMO_FREQ = 50
-SAVE_FREQ = 100
+DEMO_FREQ = 25
+SAVE_FREQ = 200
 RANDOM_SEED = 0
 
 MODEL_DIRECTORY = 'data/results/models'
@@ -52,10 +51,11 @@ RESUME_PATH = ''
 
 TIME = str(datetime.now()).replace(" ", "-")
 
-TRAIN_TRUNCATION = None
-TEST_TRUNCATION = None
+TRAIN_TRUNCATION = 2
+TEST_TRUNCATION = 0
 
 NUM_DEMO_IMGS = 2
+assert (TRAIN_TRUNCATION is None) or NUM_DEMO_IMGS <= TRAIN_TRUNCATION
 
 # arguments
 parser = argparse.ArgumentParser()
@@ -121,7 +121,7 @@ if args.resume_path:
 print()
 
 dataset_train = datasets.ModelNet40(args.dataset_directory, partition='train',
-                                    truncate = args.train_truncation)
+                                    truncate = args.train_truncation, reverse = True)
 dataset_test = datasets.ModelNet40(args.dataset_directory, partition='test',
                                    truncate = args.test_truncation)
 
@@ -202,8 +202,12 @@ def train():
 
     batch_num = 0
     for e in range(args.epochs):
-        print("epoch {}: loss {}".format(e, test_loss()))
+        if args.test_truncation > 0:
+            print("epoch {}: loss {}".format(e, test_loss()))
         for j, paths in enumerate(train_loader):
+            assert len(paths) == 2
+            paths = list(paths) * 8
+            assert len(paths) == args.batch_size
             data = [gtr.render_ground_truth(path) for path in paths]
             images, viewpoints = zip(*data)
             images = torch.cat([k.unsqueeze(0) for k in images], axis = 0)
@@ -275,12 +279,15 @@ def print_iteration_info(i, epoch, batch_time, losses, lr):
 
 def save_demo_images(paths, images, model_images, i):
     print(paths[:args.num_demo_imgs])
-    demo_input_images = images[0: args.views * args.num_demo_imgs]
-    demo_fake_images = model_images[0: args.views * args.num_demo_imgs]
-    fake_img_path = os.path.join(image_output,'%07d_fake.gif' % i)
-    input_img_path = os.path.join(image_output, '%07d_input.gif' % i)
-    imgs_to_gif(demo_fake_images, fake_img_path)
-    imgs_to_gif(demo_input_images, input_img_path)
+    to_save = [torch.cat([images[i: i + args.views],
+                          model_images[i: i + args.views]])
+                    for i in range(0, args.views * args.num_demo_imgs, args.views)]
+    to_save = torch.cat(to_save)
+    assert to_save.shape == (2 * args.views * args.num_demo_imgs, 4,
+                             args.image_size, args.image_size)
+
+    img_path = os.path.join(image_output,'%07d_demo.gif' % i)
+    imgs_to_gif(to_save, img_path)
 
 
 def save_checkpoint(i):
