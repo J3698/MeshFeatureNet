@@ -53,6 +53,7 @@ RESUME_PATH = ''
 TIME = str(datetime.now()).replace(" ", "-")
 
 TRAIN_TRUNCATION = None
+TEST_TRUNCATION = None
 
 NUM_DEMO_IMGS = 2
 
@@ -60,6 +61,7 @@ NUM_DEMO_IMGS = 2
 parser = argparse.ArgumentParser()
 parser.add_argument('-eid', '--experiment-id', type=str, default=TIME)
 parser.add_argument('-tt', '--train-truncation', type=str, default=TRAIN_TRUNCATION)
+parser.add_argument('-tet', '--test-truncation', type=str, default=TEST_TRUNCATION)
 parser.add_argument('-md', '--model-directory', type=str, default=MODEL_DIRECTORY)
 parser.add_argument('-r', '--resume-path', type=str, default=RESUME_PATH)
 parser.add_argument('-dd', '--dataset-directory', type=str, default=DATASET_DIRECTORY)
@@ -118,8 +120,10 @@ if args.resume_path:
  
 print()
 
-dataset_train = datasets.ModelNet40(args.dataset_directory, partition='train', truncate = args.train_truncation, reverse = True)
-dataset_test = datasets.ModelNet40(args.dataset_directory, partition='test')
+dataset_train = datasets.ModelNet40(args.dataset_directory, partition='train',
+                                    truncate = args.train_truncation)
+dataset_test = datasets.ModelNet40(args.dataset_directory, partition='test',
+                                   truncate = args.test_truncation)
 
 
 test_loader = DataLoader(dataset_test, batch_size = args.batch_size, shuffle = False)
@@ -162,6 +166,31 @@ def test_accuracy():
     acc = sum(svm_test_labels == predicted_labels) / len(predicted_labels)
     return acc
         
+def test_loss():
+    loss = 0
+    for paths in test_loader:
+        data = [gtr.render_ground_truth(path) for path in paths]
+        images, viewpoints = zip(*data)
+        images = torch.cat([k.unsqueeze(0) for k in images], axis = 0)
+        viewpoints = torch.cat([v.unsqueeze(0) for v in viewpoints], axis = 0)
+        loss += batch_test_loss(images, viewpoints)
+    return loss
+
+def batch_test_loss(images, viewpoints):
+    # forward
+    model.module.set_sigma(args.sigma_val)
+    model_images, laplacian_loss, flatten_loss = model(images, viewpoints)
+    laplacian_loss_avg = laplacian_loss.mean() * args.lambda_laplacian
+    flatten_loss_avg = flatten_loss.mean() * args.lambda_flatten
+
+    images_reshaped = images.reshape(model_images.shape)
+
+    mv_iou_loss = multiview_iou_loss(images_reshaped, model_images)
+
+    # compute loss
+    return mv_iou_loss + laplacian_loss_avg + flatten_loss_avg
+
+
 
 def train():
     print("Starting to train")
@@ -188,6 +217,7 @@ def train():
             end = time.time()
             del images
             del viewpoints
+        print("epoch {}: loss {}".format(e, test_loss()))
 
 
 
