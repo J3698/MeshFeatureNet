@@ -169,7 +169,7 @@ def test_accuracy():
 def test_loss():
     loss = 0
     for paths in test_loader:
-        data = [gtr.render_ground_truth(path) for path in paths]
+        data = [gtr.render_ground_truth(path, chunk = 12) for path in paths]
         images, viewpoints = zip(*data)
         images = torch.cat([k.unsqueeze(0) for k in images], axis = 0)
         viewpoints = torch.cat([v.unsqueeze(0) for v in viewpoints], axis = 0)
@@ -188,7 +188,7 @@ def batch_test_loss(images, viewpoints):
     mv_iou_loss = multiview_iou_loss(images_reshaped, model_images)
 
     # compute loss
-    return mv_iou_loss + laplacian_loss_avg + flatten_loss_avg
+    return (mv_iou_loss + laplacian_loss_avg + flatten_loss_avg).item()
 
 
 
@@ -202,6 +202,7 @@ def train():
 
     batch_num = 0
     for e in range(args.epochs):
+        print("epoch {}: loss {}".format(e, test_loss()))
         for j, paths in enumerate(train_loader):
             data = [gtr.render_ground_truth(path) for path in paths]
             images, viewpoints = zip(*data)
@@ -210,18 +211,17 @@ def train():
             if batch_num == 0:
                 print(images.shape, viewpoints.shape)
             categories = None
-            train_batch(len(data), images, viewpoints, categories, losses, batch_num, e, batch_time)
+            train_batch(paths, len(data), images, viewpoints, categories, losses, batch_num, e, batch_time)
             batch_time.update(time.time() - end)
 
             batch_num += 1
             end = time.time()
             del images
             del viewpoints
-        print("epoch {}: loss {}".format(e, test_loss()))
 
 
 
-def train_batch(batch_size, images, viewpoints, categories, losses, i, e, batch_time):
+def train_batch(paths, batch_size, images, viewpoints, categories, losses, i, e, batch_time):
     # forward
     lr = adjust_learning_rate([optimizer], args.learning_rate,
                               i, method=args.lr_type)
@@ -254,7 +254,7 @@ def train_batch(batch_size, images, viewpoints, categories, losses, i, e, batch_
     if i % args.save_freq == 0:
         save_checkpoint(i)
     if i % args.demo_freq == 0:
-        save_demo_images(images_reshaped, model_images, i)
+        save_demo_images(paths, images_reshaped, model_images, i)
     if i % args.print_freq == 0:
         print_iteration_info(i, e, batch_time, losses, lr)
 
@@ -273,7 +273,8 @@ def print_iteration_info(i, epoch, batch_time, losses, lr):
                                  lr=lr, sv=model.module.renderer.rasterizer.sigma_val))
 
 
-def save_demo_images(images, model_images, i):
+def save_demo_images(paths, images, model_images, i):
+    print(paths[:args.num_demo_imgs])
     demo_input_images = images[0: args.views * args.num_demo_imgs]
     demo_fake_images = model_images[0: args.views * args.num_demo_imgs]
     fake_img_path = os.path.join(image_output,'%07d_fake.gif' % i)

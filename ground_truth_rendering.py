@@ -18,20 +18,20 @@ class GroundTruthRenderer():
                             viewing_angle=360 / views,
                             dist_eps=1e-10)
 
-    def render_ground_truth(self, path):
+    def render_ground_truth(self, path, chunk=6):
         # get mesh
         mesh = sr.Mesh.from_obj(path)
         self.center_vertices(mesh.vertices)
         self.scale_vertices(mesh.vertices, self.max_dimension)
-        vertices = torch.chunk(torch.cat(self.views * [mesh.vertices]), 6)
-        faces = torch.chunk(torch.cat(self.views * [mesh.faces]), 6)
+        vertices = torch.chunk(torch.cat(self.views * [mesh.vertices]), chunk)
+        faces = torch.chunk(torch.cat(self.views * [mesh.faces]), chunk)
 
         # get viewpoints
         distances = torch.ones(self.views).float() * self.distance
         elevations = torch.ones(self.views).float() * self.elevation
         rotations = (-torch.arange(0, self.views) * self.deg_per_view).float()
         viewpoints = srf.get_points_from_angles(distances, elevations, rotations)
-        viewpoints = torch.chunk(viewpoints, 6)
+        viewpoints = torch.chunk(viewpoints, chunk)
         images = []
         # render images
         for views, v, f in zip(viewpoints, vertices, faces):
