@@ -48,7 +48,8 @@ EPOCHS = 10000
 
 VIEWS = 12
 
-RESUME_PATH = ''
+RESUME_PATH = "data/results/models/2020-07-30-09:02:57.021496/" + \
+              "checkpoint_0009200.pth.tar"
 
 TIME = str(datetime.now()).replace(" ", "-")
 
@@ -108,6 +109,7 @@ model = nn.DataParallel(model)
 model = model.cuda()
 
 optimizer = torch.optim.Adam(model.module.model_param(), args.learning_rate)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor = 0.3, patience = 1)
 
 start_iter = START_ITERATION
 if args.resume_path:
@@ -115,6 +117,8 @@ if args.resume_path:
     state_dicts = torch.load(args.resume_path)
     model.load_state_dict(state_dicts['model'])
     optimizer.load_state_dict(state_dicts['optimizer'])
+    if 'scheduler' in state_dicts:
+        scheduler.load_state_dict(state_dicts['scheduler'])
     start_iter = int(os.path.split(args.resume_path)[1][11:].split('.')[0]) + 1
     print('Resuming from %s iteration' % start_iter)
  
@@ -202,7 +206,10 @@ def train():
 
     batch_num = 0
     for e in range(args.epochs):
-        print("epoch {}: loss {}".format(e, test_loss()))
+        val_loss = test_loss()
+        if e != 0:
+            scheduler.step(val_loss)
+        print("epoch {}: loss {}".format(e, val_loss))
         for j, paths in enumerate(train_loader):
             data = [gtr.render_ground_truth(path) for path in paths]
             images, viewpoints = zip(*data)
@@ -221,10 +228,9 @@ def train():
 
 
 
+
 def train_batch(paths, batch_size, images, viewpoints, categories, losses, i, e, batch_time):
     # forward
-    lr = adjust_learning_rate([optimizer], args.learning_rate,
-                              i, method=args.lr_type)
     model.module.set_sigma(adjust_sigma(args.sigma_val, i))
     model_images, laplacian_loss, flatten_loss = model(images, viewpoints)
     laplacian_loss_avg = laplacian_loss.mean() * args.lambda_laplacian
@@ -267,10 +273,9 @@ def print_iteration_info(i, epoch, batch_time, losses, lr):
     print('Iter: [{0}, {1}]\t'
           'Time {batch_time.val:.3f}\t'
           'Loss {loss.val:.3f}\t'
-          'lr {lr:.6f}\t'
           'sv {sv:.6f}\t'.format(i, epoch,
                                  batch_time=batch_time, loss=losses, 
-                                 lr=lr, sv=model.module.renderer.rasterizer.sigma_val))
+                                 sv=model.module.renderer.rasterizer.sigma_val))
 
 
 def save_demo_images(paths, images, model_images, i):
@@ -288,6 +293,7 @@ def save_checkpoint(i):
     torch.save({
         'model': model.state_dict(),
         'optimizer': optimizer.state_dict(),
+        'scheduler': scheduler.state_dict(),
         }, model_path)
 
 
