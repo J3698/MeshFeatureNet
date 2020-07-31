@@ -31,6 +31,8 @@ RUN rm -rf SoftRas/build
 RUN ["conda", "run", "-n", "base", "/bin/bash", "-c", "cd SoftRas && python setup.py install"]
 RUN rm -rf SoftRas/
 
+RUN conda install scikit-learn
+
 # Expose Ports for TensorBoard (6006) (not necessary)
 EXPOSE 6006
 

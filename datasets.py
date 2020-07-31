@@ -1,5 +1,6 @@
 import os
 import soft_renderer as sr
+from random import shuffle
 import torch
 from torch.utils.data import Dataset
 import numpy as np
@@ -7,11 +8,14 @@ import tqdm
 from utils import imgs_to_gif
 
 class ModelNet40(Dataset):
-    def __init__(self, folder, partition = None, truncate = None, reverse = False):
+    def __init__(self, folder, partition = None, truncate = None, reverse = False,
+                 random = False):
         print("Constructing dataset")
         self.partition = partition
         self.folder = folder
         self.paths = sorted(self.load_file_paths())
+        if random:
+            shuffle(self.paths)
         if reverse:
             print("Reversed")
             self.paths.reverse()
@@ -54,7 +58,7 @@ class ModelNet40(Dataset):
 
 
     def get_categories(self):
-        categories = set(self.get_category(path) for path in self.paths)
+        categories = sorted(list(set(self.get_category(path) for path in self.paths)))
         return dict((cat, idx) for idx, cat in enumerate(categories))
 
 

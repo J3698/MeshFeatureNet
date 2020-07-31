@@ -45,13 +45,13 @@ dataset_directory = 'data/MN40Objs'
 
 gtr = GroundTruthRenderer(IMAGE_SIZE, SIGMA_VAL, VIEWS)
 dataset_test = datasets.ModelNet40(dataset_directory, partition='test',
-                                   truncate = None)
+                                   truncate = 50, random = True)
 test_loader = DataLoader(dataset_test, batch_size = 16, shuffle = False)
 dataset_train = datasets.ModelNet40(dataset_directory, partition='train',
-                                    truncate = None)
+                                    truncate = 50, random = True)
 test_loader = DataLoader(dataset_test, batch_size = 16, shuffle = True)
 
-cat_map = dataset_train.categories
+cat_map = datasets.ModelNet40(dataset_directory, partition='train').categories
 
 def get_svm_data(data_loader):
     print("Getting SVM features")
@@ -66,24 +66,29 @@ def get_svm_data(data_loader):
         batch_size = len(images)
         assert batch_size == len(categories) and batch_size == len(viewpoints)
 
-        feats = model.module.compute_features(images).detach().cpu()
-        feats = [i for i in feats]
+        feats = model.module.compute_features(images).detach().cpu().numpy()
+        feats = [i.tolist() for i in feats]
         assert all(len(feat) == model.module.encoder.dim_out for feat in feats)
 
         answers = [cat_map[j] for j in categories]
         x_data += feats
         y_data += answers
 
+    assert isinstance(x_data, list)
+    assert isinstance(x_data[0], list)
+    assert isinstance(y_data, list)
+    assert isinstance(y_data[0], int)
+
     return x_data, y_data
 
 
 def test_accuracy():
-    # svm_train_feats, svm_train_labels = get_svm_data(train_loader)
-    svm_test_feats, svm_test_labels = get_svm_data(test_loader)
+    svm_train_feats, svm_train_labels = get_svm_data(train_loader)
     classifier = svm.LinearSVC()
     print("Fitting SVM")
-    classifier.fit(svm_test_feats, svm_test_labels)
+    classifier.fit(svm_train_feats, svm_train_labels)
 
+    svm_test_feats, svm_test_labels = get_svm_data(test_loader)
     predicted_labels = classifier.predict(svm_test_feats)
     acc = sum(svm_test_labels == predicted_labels) / len(predicted_labels)
     return acc
