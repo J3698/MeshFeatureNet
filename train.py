@@ -49,7 +49,7 @@ EPOCHS = 10000
 VIEWS = 12
 
 RESUME_PATH = "data/results/models/2020-07-30-09:02:57.021496/" + \
-              "checkpoint_0009200.pth.tar"
+              "checkpoint_0012900.pth.tar"
 
 TIME = str(datetime.now()).replace(" ", "-")
 
