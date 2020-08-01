@@ -44,12 +44,12 @@ model.load_state_dict(state_dicts['model'])
 dataset_directory = 'data/MN40Objs'
 
 gtr = GroundTruthRenderer(IMAGE_SIZE, SIGMA_VAL, VIEWS)
-dataset_test = datasets.ModelNet40(dataset_directory, partition='test',
-                                   truncate = 50, random = True)
+
+dataset_test = datasets.ModelNet40(dataset_directory, partition='test', random = True)
 test_loader = DataLoader(dataset_test, batch_size = 16, shuffle = False)
-dataset_train = datasets.ModelNet40(dataset_directory, partition='train',
-                                    truncate = 50, random = True)
-test_loader = DataLoader(dataset_test, batch_size = 16, shuffle = True)
+
+dataset_train = datasets.ModelNet40(dataset_directory, partition='train', random = True)
+train_loader = DataLoader(dataset_train, batch_size = 16, shuffle = True)
 
 cat_map = datasets.ModelNet40(dataset_directory, partition='train').categories
 
