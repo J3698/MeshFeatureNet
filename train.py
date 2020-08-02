@@ -262,14 +262,14 @@ def train_batch(paths, batch_size, images, viewpoints, categories, losses, i, e,
     if i % args.demo_freq == 0:
         save_demo_images(paths, images_reshaped, model_images, i)
     if i % args.print_freq == 0:
-        print_iteration_info(i, e, batch_time, losses, lr)
+        print_iteration_info(i, e, batch_time, losses)
 
 def assert_shape(tensor, correct_shape):
     shape_correct = tensor.shape == correct_shape
     incorrect_msg = "expected {} actual {}".format(correct_shape, tensor.shape)
     assert shape_correct, incorrect_msg
 
-def print_iteration_info(i, epoch, batch_time, losses, lr):
+def print_iteration_info(i, epoch, batch_time, losses):
     print('Iter: [{0}, {1}]\t'
           'Time {batch_time.val:.3f}\t'
           'Loss {loss.val:.3f}\t'
