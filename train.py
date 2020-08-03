@@ -48,8 +48,7 @@ EPOCHS = 10000
 
 VIEWS = 12
 
-RESUME_PATH = "data/results/models/2020-07-30-09:02:57.021496/" + \
-              "checkpoint_0012900.pth.tar"
+RESUME_PATH = None
 
 TIME = str(datetime.now()).replace(" ", "-")
 
@@ -101,7 +100,9 @@ image_output = os.path.join(directory_output, 'pic')
 os.makedirs(image_output, exist_ok=True)
 
 # setup model & optimizer
-model = models.Model('data/obj/sphere/sphere_1352.obj', args=args)
+sphere = 'data/obj/sphere/sphere_642.obj'
+print(sphere)
+model = models.Model(sphere, args=args)
 
 print("GPUs: {}".format(torch.cuda.device_count()))
 # if torch.cuda.device_count() > 1:
@@ -109,7 +110,7 @@ model = nn.DataParallel(model)
 model = model.cuda()
 
 optimizer = torch.optim.Adam(model.module.model_param(), args.learning_rate)
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor = 0.3, patience = 1)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor = 0.3, patience = 1, verbose = True)
 
 start_iter = START_ITERATION
 if args.resume_path:
