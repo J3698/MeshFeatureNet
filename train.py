@@ -31,7 +31,7 @@ DEMO_FREQ = 1000
 SAVE_FREQ = 10000
 RANDOM_SEED = 0
 
-MODEL_DIRECTORY = 'data/results/models'
+MODEL_DIRECTORY = 'data/results/models/'
 DATASET_DIRECTORY = 'data/MN40Objs'
 
 IMAGE_SIZE = 128
@@ -46,7 +46,7 @@ print("Parsing args")
 
 # arguments
 parser = argparse.ArgumentParser()
-parser.add_argument('-eid', '--experiment-id', type=str)
+parser.add_argument('-eid', '--experiment-id', type=str, default="40000etc")
 parser.add_argument('-md', '--model-directory', type=str, default=MODEL_DIRECTORY)
 parser.add_argument('-r', '--resume-path', type=str, default=RESUME_PATH)
 parser.add_argument('-dd', '--dataset-directory', type=str, default=DATASET_DIRECTORY)

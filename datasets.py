@@ -59,6 +59,10 @@ class ModelNet40():
     def get_random_batch(self, batch_size):
         if self.rand_b is None:
             self.rand_b = np.random.randint(0, len(self) - 1)
+            print(self.rand_b)
+            print(len(self.paths))
+            print(self.paths[self.rand_b])
+            raise 3
         images_and_viewpoints = [self[self.rand_b] for i in range(batch_size)]
         images, viewpoints = zip(*images_and_viewpoints)
 
