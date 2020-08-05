@@ -33,7 +33,7 @@ class ModelNet40(Dataset):
         template = ("Partition: {}\nFolder: {}\nModels: {}"
                     "\nSample model path: {}\n")
         return template.format(self.partition, self.folder,
-                               len(self), self.paths[0])
+                               len(self), self.paths[0] if len(self) > 0 else "NA")
 
 
     def load_file_paths(self):
