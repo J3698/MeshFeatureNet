@@ -15,12 +15,16 @@ import models
 import imageio
 import time
 from datetime import datetime
+from time import sleep
 import os
+import sys
 from ground_truth_rendering import GroundTruthRenderer
 
 
-resume_path = "data/results/models/2020-07-30-09:02:57.021496/" + \
-              "checkpoint_0005300.pth.tar"
+model1 = "/data/datasets/asanders/MeshFeatureNet/data/results/models/2020-08-03-13:44:28.549495"
+model2 = "/data/datasets/asanders/MeshFeatureNet/data/results/models/2020-08-03-13:42:10.827513"
+
+dataset_directory = 'data/MN40Objs'
 
 SIGMA_VAL = 1e-4
 IMAGE_SIZE = 64
@@ -31,18 +35,6 @@ parser.add_argument('-is', '--image-size', type=int, default=IMAGE_SIZE)
 parser.add_argument('-sv', '--sigma-val', type=float, default=SIGMA_VAL)
 args = parser.parse_args()
 
-
-start_iter = int(os.path.split(resume_path)[1][11:].split('.')[0]) + 1
-print('Loading model from iteration %s' % start_iter)
-model = models.Model('data/obj/sphere/sphere_1352.obj', args=args)
-model = nn.DataParallel(model)
-model = model.cuda()
-state_dicts = torch.load(resume_path)
-model.load_state_dict(state_dicts['model'])
-
-
-dataset_directory = 'data/MN40Objs'
-
 gtr = GroundTruthRenderer(IMAGE_SIZE, SIGMA_VAL, VIEWS)
 dataset_test = datasets.ModelNet40(dataset_directory, partition='test',
                                    truncate = None)
@@ -50,10 +42,29 @@ test_loader = DataLoader(dataset_test, batch_size = 16, shuffle = False)
 dataset_train = datasets.ModelNet40(dataset_directory, partition='train',
                                     truncate = None)
 test_loader = DataLoader(dataset_test, batch_size = 16, shuffle = True)
-
 cat_map = dataset_train.categories
 
-def get_svm_data(data_loader):
+
+
+def main():
+    model = models.Model('data/obj/sphere/sphere_1352.obj', args=args)
+    model = nn.DataParallel(model)
+    model = model.cuda()
+    for model in zip(get_checkpoints(model, model1), get_checkpoints(model, model2)):
+        test_accuracy(model)
+
+
+def get_checkpoints(model, model_path):
+    for checkpoint in os.listdir(model_path):
+        if checkpoint.endswith("pth.tar"):
+            resume_path = os.path.join(model_path, checkpoint)
+            print(resume_path)
+            state_dicts = torch.load(resume_path)
+            model.load_state_dict(state_dicts['model'])
+            yield model
+
+
+def get_svm_data(model, data_loader):
     print("Getting SVM features")
     x_data = []
     y_data = []
@@ -77,9 +88,9 @@ def get_svm_data(data_loader):
     return x_data, y_data
 
 
-def test_accuracy():
-    # svm_train_feats, svm_train_labels = get_svm_data(train_loader)
-    svm_test_feats, svm_test_labels = get_svm_data(test_loader)
+def test_accuracy(model):
+    # svm_train_feats, svm_train_labels = get_svm_data(model, train_loader)
+    svm_test_feats, svm_test_labels = get_svm_data(model, test_loader)
     classifier = svm.LinearSVC()
     print("Fitting SVM")
     classifier.fit(svm_test_feats, svm_test_labels)
@@ -88,4 +99,5 @@ def test_accuracy():
     acc = sum(svm_test_labels == predicted_labels) / len(predicted_labels)
     return acc
 
-print(test_accuracy())
+if __name__ == "__main__":
+    main()
