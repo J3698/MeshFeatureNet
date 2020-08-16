@@ -11,7 +11,7 @@ from utils import AverageMeter, imgs_to_gif
 import soft_renderer as sr
 import soft_renderer.functional as srf
 from tqdm import tqdm
-import datasets
+from datasets import ModelNet40Views
 import models
 import imageio
 import time
@@ -19,22 +19,24 @@ from datetime import datetime
 import os
 from ground_truth_rendering import GroundTruthRenderer
 
+import cv2 
+
 print("Parsing args")
 
-CLASS_IDS_ALL = (
-    '02691156,02828884,02933112,02958343,03001627,03211117,03636649,' +
-    '03691459,04090263,04256520,04379243,04401088,04530566')
+# CLASS_IDS_ALL = (
+#     '02691156,02828884,02933112,02958343,03001627,03211117,03636649,' +
+#     '03691459,04090263,04256520,04379243,04401088,04530566')
 
-BATCH_SIZE = 16
+BATCH_SIZE = 32
 LEARNING_RATE = 1e-4
 LR_TYPE = 'step'
 
 LAMBDA_LAPLACIAN = 5e-3
 LAMBDA_FLATTEN = 5e-4
 
-PRINT_FREQ = 50
-DEMO_FREQ = 50
-SAVE_FREQ = 100
+PRINT_FREQ = 10
+DEMO_FREQ = 1000
+SAVE_FREQ = 5000
 RANDOM_SEED = 0
 
 MODEL_DIRECTORY = 'data/results/models'
@@ -44,7 +46,8 @@ IMAGE_SIZE = 64
 SIGMA_VAL = 1e-4
 START_ITERATION = 0
 
-EPOCHS = 10000
+EPOCHS = 1000
+TEST_INTERVAL = 100
 
 VIEWS = 12
 
@@ -65,11 +68,12 @@ parser.add_argument('-tet', '--test-truncation', type=str, default=TEST_TRUNCATI
 parser.add_argument('-md', '--model-directory', type=str, default=MODEL_DIRECTORY)
 parser.add_argument('-r', '--resume-path', type=str, default=RESUME_PATH)
 parser.add_argument('-dd', '--dataset-directory', type=str, default=DATASET_DIRECTORY)
-parser.add_argument('-cls', '--class-ids', type=str, default=CLASS_IDS_ALL)
+# parser.add_argument('-cls', '--class-ids', type=str, default=CLASS_IDS_ALL)
 parser.add_argument('-is', '--image-size', type=int, default=IMAGE_SIZE)
 parser.add_argument('-v', '--views', type=int, default=VIEWS)
 parser.add_argument('-e', '--epochs', type=int, default=EPOCHS)
 parser.add_argument('-b', '--batch-size', type=int, default=BATCH_SIZE)
+parser.add_argument('-ti', '--test-interval', type=int, default=TEST_INTERVAL)
 
 parser.add_argument('-sv', '--sigma-val', type=float, default=SIGMA_VAL)
 
@@ -87,12 +91,12 @@ parser.add_argument('-ndi', '--num-demo-imgs', type=int, default=NUM_DEMO_IMGS)
 args = parser.parse_args()
 print(args)
 
-print("Setting up torch/np")
+# print("Setting up torch/np")
 
-torch.backends.cudnn.deterministic = True
-torch.manual_seed(args.seed)
-torch.cuda.manual_seed_all(args.seed)
-np.random.seed(args.seed)
+# torch.backends.cudnn.deterministic = True
+# torch.manual_seed(args.seed)
+# torch.cuda.manual_seed_all(args.seed)
+# np.random.seed(args.seed)
 
 directory_output = os.path.join(args.model_directory, args.experiment_id)
 os.makedirs(directory_output, exist_ok=True)
@@ -125,15 +129,15 @@ if args.resume_path:
  
 print()
 
-dataset_train = datasets.ModelNet40(args.dataset_directory, partition='train',
-                                    truncate = args.train_truncation)
-dataset_test = datasets.ModelNet40(args.dataset_directory, partition='test',
-                                   truncate = args.test_truncation)
+# dataset_train = datasets.ModelNet40(args.dataset_directory, partition='train',
+#                                     truncate = args.train_truncation)
+# dataset_test = datasets.ModelNet40(args.dataset_directory, partition='test',
+#                                    truncate = args.test_truncation)
+dataset_train = ModelNet40Views('data/MN40_train.txt', views = args.views)
+dataset_test = ModelNet40Views('data/MN40_test.txt', views = args.views)
 
-
-test_loader = DataLoader(dataset_test, batch_size = args.batch_size, shuffle = False)
-train_loader = DataLoader(dataset_train, batch_size = args.batch_size, shuffle = True)
-
+test_loader = DataLoader(dataset_test, batch_size = args.batch_size, shuffle = False, num_workers = 8)
+train_loader = DataLoader(dataset_train, batch_size = args.batch_size, shuffle = True, num_workers = 8)
 
 gtr = GroundTruthRenderer(args.image_size, args.sigma_val, args.views)
 
@@ -171,20 +175,13 @@ def test_accuracy():
     acc = sum(svm_test_labels == predicted_labels) / len(predicted_labels)
     return acc
         
-def test_loss():
-    loss = 0
-    for paths in test_loader:
-        data = [gtr.render_ground_truth(path, chunk = 12) for path in paths]
-        images, viewpoints = zip(*data)
-        images = torch.cat([k.unsqueeze(0) for k in images], axis = 0)
-        viewpoints = torch.cat([v.unsqueeze(0) for v in viewpoints], axis = 0)
-        loss += batch_test_loss(images, viewpoints)
-    return loss
-
 def batch_test_loss(images, viewpoints):
     # forward
+    model.eval()
     model.module.set_sigma(args.sigma_val)
-    model_images, laplacian_loss, flatten_loss = model(images, viewpoints)
+    with torch.no_grad():
+        model_images, laplacian_loss, flatten_loss = model(images, viewpoints)
+
     laplacian_loss_avg = laplacian_loss.mean() * args.lambda_laplacian
     flatten_loss_avg = flatten_loss.mean() * args.lambda_flatten
 
@@ -204,34 +201,74 @@ def train():
     batch_time = AverageMeter()
     data_time = AverageMeter()
     losses = AverageMeter()
-
+    losslist = []
+    testlosslist = []
+    test_iter = iter(test_loader) # convert to an iterator
+    # import ipdb;ipdb.set_trace()
     batch_num = 0
     for e in range(args.epochs):
-        val_loss = test_loss()
-        if e != 0:
-            scheduler.step(val_loss)
-        print("epoch {}: loss {}".format(e, val_loss))
-        for j, paths in enumerate(train_loader):
-            data = [gtr.render_ground_truth(path) for path in paths]
-            images, viewpoints = zip(*data)
-            images = torch.cat([k.unsqueeze(0) for k in images], axis = 0)
+        # val_loss = test_loss()
+        # if e != 0:
+        #     scheduler.step(val_loss)
+        # print("epoch {}: loss {}".format(e, val_loss))
+        for j, sample in enumerate(train_loader):
+            # data = [gtr.render_ground_truth(path) for path in paths]
+            images = sample[0].cuda()
+            viewpoints = sample[1].cuda()
+            data_time.update(time.time() - end)
+            # images, viewpoints = zip(*data)
+            # images = torch.cat([k.unsqueeze(0) for k in images], axis = 0)
+
+            # # === debug ===
+            # imgnp = images.cpu().numpy()
+            # imgdisp = np.zeros((512,128,4))
+            # for k in range(8):
+            #     for w in range(2):
+            #         imgdisp[k*64:k*64+64,w*64:w*64+64,:] = imgnp[k,w].transpose(1,2,0)
+
+            # # imgdisp = cv2.resize(imgdisp, (1024, 256))
+            # cv2.imshow('img', imgdisp)
+            # cv2.waitKey(0)
+            # # import ipdb;ipdb.set_trace()
+            # # =============
+
             viewpoints = torch.cat([v.unsqueeze(0) for v in viewpoints], axis = 0)
             if batch_num == 0:
                 print(images.shape, viewpoints.shape)
             categories = None
-            train_batch(paths, len(data), images, viewpoints, categories, losses, batch_num, e, batch_time)
-            batch_time.update(time.time() - end)
+            loss = train_batch( len(images), images, viewpoints, categories, losses, batch_num, e, batch_time, data_time, end)
+
+            losslist.append([batch_num, loss])
 
             batch_num += 1
             end = time.time()
             del images
             del viewpoints
 
+            if batch_num % args.test_interval ==0:
+                # load sample from the dataloader
+                try:
+                    sample = test_iter.next()
+                except StopIteration:
+                    test_iter = iter(test_loader)
+                    sample = test_iter.next()
+
+                images = sample[0].cuda()
+                viewpoints = sample[1].cuda()
+                testloss = batch_test_loss( images, viewpoints)
+                testlosslist.append([batch_num, testloss])
+                print('  == TEST Loss {}'.format(testloss))
+
+
+    np.savetxt(directory_output+'/loss.txt', np.array(losslist))
+    np.savetxt(directory_output+'/test_loss.txt', np.array(testlosslist))
 
 
 
-def train_batch(paths, batch_size, images, viewpoints, categories, losses, i, e, batch_time):
+def train_batch( batch_size, images, viewpoints, categories, losses, i, e, batch_time, data_time, end):
     # forward
+    # import ipdb;ipdb.set_trace()
+    model.train()
     model.module.set_sigma(adjust_sigma(args.sigma_val, i))
     model_images, laplacian_loss, flatten_loss = model(images, viewpoints)
     laplacian_loss_avg = laplacian_loss.mean() * args.lambda_laplacian
@@ -242,9 +279,9 @@ def train_batch(paths, batch_size, images, viewpoints, categories, losses, i, e,
     assert images_reshaped.shape == model_images.shape, (images.shape, model_images.shape)
 
     mv_iou_loss = multiview_iou_loss(images_reshaped, model_images)
-    if i % args.print_freq == 0:
-        print("iou, lap, flat", mv_iou_loss.item(),
-              laplacian_loss_avg.item(), flatten_loss_avg.item())
+    # if i % args.print_freq == 0:
+    #     print("iou, lap, flat", mv_iou_loss.item(),
+    #           laplacian_loss_avg.item(), flatten_loss_avg.item())
 
     # compute loss
     loss = mv_iou_loss + laplacian_loss_avg + flatten_loss_avg
@@ -255,32 +292,36 @@ def train_batch(paths, batch_size, images, viewpoints, categories, losses, i, e,
     loss.backward()
     optimizer.step()
 
+    batch_time.update(time.time() - end)
+
     if i % 100 == 0 and i != 0:
         pass
         # print(test_accuracy())
     if i % args.save_freq == 0:
         save_checkpoint(i)
     if i % args.demo_freq == 0:
-        save_demo_images(paths, images_reshaped, model_images, i)
+        save_demo_images(images_reshaped, model_images, i)
     if i % args.print_freq == 0:
-        print_iteration_info(i, e, batch_time, losses)
+        print_iteration_info(i, e, batch_time, data_time, losses)
+
+    return loss.data.item()
 
 def assert_shape(tensor, correct_shape):
     shape_correct = tensor.shape == correct_shape
     incorrect_msg = "expected {} actual {}".format(correct_shape, tensor.shape)
     assert shape_correct, incorrect_msg
 
-def print_iteration_info(i, epoch, batch_time, losses):
+def print_iteration_info(i, epoch, batch_time, data_time, losses):
     print('Iter: [{0}, {1}]\t'
-          'Time {batch_time.val:.3f}\t'
+          'Time total: {batch_time.val:.3f} - data: {data_time.val:.3f}\t'
           'Loss {loss.val:.3f}\t'
           'sv {sv:.6f}\t'.format(i, epoch,
-                                 batch_time=batch_time, loss=losses, 
+                                 batch_time=batch_time, data_time=data_time, loss=losses, 
                                  sv=model.module.renderer.rasterizer.sigma_val))
 
 
-def save_demo_images(paths, images, model_images, i):
-    print(paths[:args.num_demo_imgs])
+def save_demo_images(images, model_images, i):
+    # print(paths[:args.num_demo_imgs])
     demo_input_images = images[0: args.views * args.num_demo_imgs]
     demo_fake_images = model_images[0: args.views * args.num_demo_imgs]
     fake_img_path = os.path.join(image_output,'%07d_fake.gif' % i)

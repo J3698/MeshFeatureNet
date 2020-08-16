@@ -29,7 +29,7 @@ class Encoder(nn.Module):
         self.fc2 = nn.Linear(dim_hidden[3], dim_hidden[4])
         self.fc3 = nn.Linear(dim_hidden[4], dim_out)
 
-        self.encoder = nn.LSTM(dim_out, dim_out, num_layers = 3)
+        self.encoder = nn.LSTM(dim_out, dim_out, num_layers = 2)
 
     def forward(self, x):
         # convert batch of image sequences into one big batch
@@ -53,6 +53,7 @@ class Encoder(nn.Module):
         self.encoder.flatten_parameters()
         x = self.encoder(x)[0][-1]
         assert x.shape == (batch_size, self.dim_out)
+        # x = x[:,0,:]
 
         return x
 
@@ -165,6 +166,7 @@ class Model(nn.Module):
         Returns the reconstructed images and the laplacian and flatten losses from the predicted
         meshes.
         """
+        # import ipdb;ipdb.set_trace()
         batch_size, num_views, _, _, _ = images.shape
 
         # generate meshes
@@ -172,6 +174,11 @@ class Model(nn.Module):
         num_vertices, num_faces = vertices.shape[1], faces.shape[1]
         assert vertices.shape == (batch_size, num_vertices, 3)
         assert faces.shape == (batch_size, num_faces, 3)
+
+        # calculate mesh loss
+        # wenshan: calculate these two losses before replication
+        laplacian_loss = self.laplacian_loss(vertices)
+        flatten_loss = self.flatten_loss(vertices)
 
         # copy meshes for batch rendering
         vertices = torch.cat(num_views * [vertices.unsqueeze(0)])
@@ -193,9 +200,6 @@ class Model(nn.Module):
         self.renderer.transform.set_eyes(viewpoints)
         reconstructed_images = self.renderer(vertices, faces)
 
-        # calculate mesh loss
-        laplacian_loss = self.laplacian_loss(vertices)
-        flatten_loss = self.flatten_loss(vertices)
 
         # return images as separate tensors
         batch_size = images.size(0)
