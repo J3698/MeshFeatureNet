@@ -29,7 +29,7 @@ class Encoder(nn.Module):
         self.fc2 = nn.Linear(dim_hidden[3], dim_hidden[4])
         self.fc3 = nn.Linear(dim_hidden[4], dim_out)
 
-        self.encoder = nn.LSTM(dim_out, dim_out, num_layers = 3)
+        self.encoder = nn.LSTM(dim_out, dim_out, num_layers = 1)
 
     def forward(self, x):
         # convert batch of image sequences into one big batch

@@ -32,7 +32,7 @@ LR_TYPE = 'step'
 LAMBDA_LAPLACIAN = 5e-3
 LAMBDA_FLATTEN = 5e-4
 
-PRINT_FREQ = 50
+PRINT_FREQ = 1
 DEMO_FREQ = 50
 SAVE_FREQ = 100
 RANDOM_SEED = 0
@@ -46,7 +46,7 @@ START_ITERATION = 0
 
 EPOCHS = 10000
 
-VIEWS = 12
+VIEWS = 3
 
 RESUME_PATH = None
 
@@ -177,6 +177,8 @@ def test_loss():
         data = [gtr.render_ground_truth(path, chunk = 12) for path in paths]
         images, viewpoints = zip(*data)
         images = torch.cat([k.unsqueeze(0) for k in images], axis = 0)
+        print(images.shape)
+        print(images != 0)
         viewpoints = torch.cat([v.unsqueeze(0) for v in viewpoints], axis = 0)
         loss += batch_test_loss(images, viewpoints)
     return loss
